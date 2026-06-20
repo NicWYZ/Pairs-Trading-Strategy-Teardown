@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Data and generated outputs (folders kept via .gitkeep)
+data/raw/*
+data/processed/*
+reports/figures/*
+reports/results/*
+!**/.gitkeep
+
+PROJECT_PLAN.md
