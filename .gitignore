@@ -18,3 +18,4 @@ reports/results/*
 !**/.gitkeep
 
 PROJECT_PLAN.md
+.vscode/
