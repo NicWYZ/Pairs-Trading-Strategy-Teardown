@@ -22,7 +22,7 @@ def download_prices(
     -------
     DataFrame with DatetimeIndex and one column per ticker (adjusted close).
     """
-    raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
+    raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False, threads=False)
 
     # yfinance returns MultiIndex columns when multiple tickers are passed;
     # 'Close' under auto_adjust=True is the adjusted close price.

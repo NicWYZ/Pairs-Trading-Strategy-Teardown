@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repo is in early scaffolding: `src/pairs_teardown/` currently contains only empty
-package `__init__.py` files and a top-level `__version__`. There is no `config.py`,
-no `data/loaders.py`, no backtest engine, no scripts, and no `configs/pairs.yaml` yet.
+**Stage 1 (data layer) is in progress.** Completed so far:
+
+- `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
+  via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
+  re-running is safe.
+- `src/pairs_teardown/data/clean.py` — align/clean logic (drops NaN-only rows, handles
+  FOXA/FOX which only trades from 2019-03-13 onward after the Disney deal closed).
+- `scripts/download_data.py` — entry point; prints per-pair summaries after cleaning.
+- Raw data cached at `data/raw/FOX_FOXA_RSG_SPY_VOO_WM_20150101_20241231.parquet`.
+
+Still to build: everything from Stage 1 stats onward (`config.py`, `stats/`, `signals/`,
+`backtest/`, `metrics/`, `plotting/`, `scripts/run_backtest.py`, `configs/pairs.yaml`).
+
 **`PROJECT_PLAN.md` is the authoritative build guide** — read it before adding any module.
 It specifies exact file purposes, function signatures, dependencies, and a strict build
 order (Stage 0 → Stage 8). Follow that order: don't implement the backtest engine before
@@ -26,12 +36,27 @@ No `Makefile` exists yet (see PROJECT_PLAN.md §5 for the planned `make install/
 wrappers). Until it's added, use the underlying tools directly:
 
 ```bash
-uv pip install -e ".[dev]"   # install package + dev deps (pytest, ruff, mypy, pre-commit)
+uv sync --extra dev           # install/sync all deps including dev (preferred over uv pip install -e)
+uv run python scripts/download_data.py   # fetch + cache raw prices
 pytest                        # run all tests (testpaths = ["tests"])
 pytest tests/test_engine.py -k look_ahead   # run a single test
 ruff check .                  # lint
 mypy src                      # type check
 ```
+
+### Environment gotchas
+
+- **Always use `uv sync --extra dev`** to set up the environment, not `uv pip install -e ".[dev]"`.
+  Using `uv pip install` can install into a different Python version than what `uv sync` uses,
+  corrupting the venv with two `python3.X` directories — the editable `.pth` lands in the wrong
+  one and `import pairs_teardown` silently fails. If this happens, `rm -rf .venv && uv sync --extra dev`.
+- **`uv run` uses the lockfile's Python** (currently CPython 3.12 via miniconda). Don't override
+  with a system Python or the venv will split again.
+- **Build backend is `hatchling`** (not setuptools). Miniconda's Python 3.12 skips `.pth` files
+  whose names start with `__`, which is exactly what setuptools names its editable install file
+  (`__editable__.pairs_teardown-0.1.0.pth`). Hatchling names it `_editable_impl_*` (single
+  underscore), which Python processes normally. Do not switch back to setuptools.
+- The editable install persists across sessions once the venv exists — no need to reinstall.
 
 ## Architecture (per PROJECT_PLAN.md)
 
