@@ -31,4 +31,4 @@ def align_prices(df: pd.DataFrame) -> pd.DataFrame:
 
 def to_log_prices(df: pd.DataFrame) -> pd.DataFrame:
     """Return natural log of prices."""
-    return np.log(df)
+    return pd.DataFrame(np.log(df), index=df.index, columns=df.columns)

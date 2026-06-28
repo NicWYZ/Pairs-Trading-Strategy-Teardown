@@ -3,13 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
+import yfinance as yf  # type: ignore[import-untyped]
 
 def download_prices(
         tickers: list[str],
         start:str,
         end: str
 ) -> pd.DataFrame:
+    
     """Download daily adjusted-close prices for a list of tickers.
 
     Parameters
@@ -22,20 +23,21 @@ def download_prices(
     -------
     DataFrame with DatetimeIndex and one column per ticker (adjusted close).
     """
-    raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False, threads=False)
+    raw: pd.DataFrame = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False, threads=False) # type: ignore
 
     # yfinance returns MultiIndex columns when multiple tickers are passed;
     # 'Close' under auto_adjust=True is the adjusted close price.
+    prices: pd.DataFrame
     if isinstance(raw.columns, pd.MultiIndex):
-        prices = raw["Close"].copy()
+        prices = raw["Close"].copy()  # type: ignore[assignment]
     else:
         # Single ticker falls back to flat columns
         prices = raw[["Close"]].rename(columns={"Close": tickers[0]})
 
     prices.index.name = "Date"
     # Reorder columns to match the input list order
-    prices = prices[[t for t in tickers if t in prices.columns]]
-    return prices
+    cols = [t for t in tickers if t in prices.columns]
+    return prices[cols]  # type: ignore[return-value]
 
 def load_or_download(
     tickers: list[str],

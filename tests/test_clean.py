@@ -71,4 +71,4 @@ def test_handle_before_align_salvages_small_gaps(prices_with_gap: pd.DataFrame) 
 
 def test_log_prices_match_numpy(clean_prices: pd.DataFrame) -> None:
     result = to_log_prices(clean_prices)
-    pd.testing.assert_frame_equal(result, np.log(clean_prices))
+    pd.testing.assert_frame_equal(result, pd.DataFrame(np.log(clean_prices), index = clean_prices.index, columns = clean_prices.columns))

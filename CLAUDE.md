@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 1 (data layer) is in progress.** Completed so far:
+**Stage 2 (cointegration layer) is complete.** Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -13,9 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   FOXA/FOX which only trades from 2019-03-13 onward after the Disney deal closed).
 - `scripts/download_data.py` — entry point; prints per-pair summaries after cleaning.
 - Raw data cached at `data/raw/FOX_FOXA_RSG_SPY_VOO_WM_20150101_20241231.parquet`.
+- `src/pairs_teardown/stats/cointegration.py` — `estimate_hedge_ratio` (OLS, IS window only),
+  `build_spread`, `adf_pvalue`, `engle_granger_pvalue`, and `analyze_pair` (bundles all four
+  into a `CointegrationResult` dataclass). 14 tests pass across `test_clean.py`,
+  `test_cointegration.py`, and `test_smoke.py`.
 
-Still to build: everything from Stage 1 stats onward (`config.py`, `stats/`, `signals/`,
-`backtest/`, `metrics/`, `plotting/`, `scripts/run_backtest.py`, `configs/pairs.yaml`).
+Still to build: `signals/` (rolling z-score, entry/exit rules), `backtest/` (engine + costs),
+`metrics/`, `plotting/`, `config.py`, `scripts/run_backtest.py`, `configs/pairs.yaml`.
 
 **`PROJECT_PLAN.md` is the authoritative build guide** — read it before adding any module.
 It specifies exact file purposes, function signatures, dependencies, and a strict build
