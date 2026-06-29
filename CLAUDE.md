@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 2 (cointegration layer) is complete.** Completed so far:
+**Stage 3 (signals layer) is complete.** Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -15,11 +15,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Raw data cached at `data/raw/FOX_FOXA_RSG_SPY_VOO_WM_20150101_20241231.parquet`.
 - `src/pairs_teardown/stats/cointegration.py` — `estimate_hedge_ratio` (OLS, IS window only),
   `build_spread`, `adf_pvalue`, `engle_granger_pvalue`, and `analyze_pair` (bundles all four
-  into a `CointegrationResult` dataclass). 14 tests pass across `test_clean.py`,
-  `test_cointegration.py`, and `test_smoke.py`.
+  into a `CointegrationResult` dataclass).
+- `src/pairs_teardown/signals/spread.py` — `rolling_zscore` using trailing window only
+  (no look-ahead).
+- `src/pairs_teardown/signals/rules.py` — `target_positions` with entry/exit thresholds
+  and hysteresis (holds prior position between thresholds). 20 tests pass across all
+  test files.
 
-Still to build: `signals/` (rolling z-score, entry/exit rules), `backtest/` (engine + costs),
-`metrics/`, `plotting/`, `config.py`, `scripts/run_backtest.py`, `configs/pairs.yaml`.
+Still to build: `backtest/` (engine + costs), `metrics/`, `plotting/`, `config.py`,
+`scripts/run_backtest.py`, `configs/pairs.yaml`.
+
+### Environment note
+macOS re-applies the `hidden` flag to `.venv` (dot-prefixed dirs). If `import pairs_teardown`
+fails, run `chflags -R nohidden .venv` to fix it.
 
 **`PROJECT_PLAN.md` is the authoritative build guide** — read it before adding any module.
 It specifies exact file purposes, function signatures, dependencies, and a strict build
