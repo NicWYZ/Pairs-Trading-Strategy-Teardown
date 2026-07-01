@@ -10,6 +10,44 @@ import pandas as pd
 
 from pairs_teardown.backtest.costs import CostModel
 
+class UnstableHedgeRatioError(ValueError):
+    """
+    Raised when a hedge ratio series is too volatile/sign-unstable for sizing.
+    """
+
+
+def validate_sizing_hedge_ratio(hedge_ratio: pd.Series, max_std: float = 0.05) -> None:
+    """
+    Guard against passing a noisy rolling hedge ratio into run_backtest for sizing.
+
+    Sizing (unlike signal construction) requires stability: a hedge ratio that
+    crosses zero or swings widely can silently convert a market-neutral position
+    into a large directional bet on the common factor between the two assets.
+    See test_engine.py::test_correct_hedge_sign_neutralizes_common_move_wrong_sign_does_not
+    for the underlying mechanism.
+
+    Raises UnstableHedgeRatioError if the series is too volatile or changes sign.
+    NaNs (e.g. warmup period) are ignored.
+    """
+    valid = hedge_ratio.dropna()
+    if valid.empty:
+        return
+
+    if valid.std() > max_std:
+        raise UnstableHedgeRatioError(
+            f"Sizing hedge ratio has std={valid.std():.3f} (max allowed {max_std}). "
+            "Use a more stable estimate (e.g. static full-sample OLS) for trade sizing; "
+            "a rolling estimate is fine for building the SIGNAL, not for SIZING the trade."
+        )
+
+    frac_positive = (valid > 0).mean()
+    if not (frac_positive > 0.99 or frac_positive < 0.01):
+        raise UnstableHedgeRatioError(
+            f"Sizing hedge ratio changes sign ({frac_positive:.1%} of values positive). "
+            "A sign-unstable hedge ratio breaks the hedge instead of neutralizing it. "
+            "Use a stable estimate for trade sizing."
+        )
+
 @dataclass
 class BacktestResult:
     returns: pd.Series          # net daily strategy return (after costs)
@@ -25,6 +63,7 @@ def run_backtest(
     target_positions: pd.Series,
     hedge_ratio: pd.Series,
     cost_model: CostModel,
+    skip_hedge_validation: bool = False
 ) -> BacktestResult:
     """
     Simulate the pairs strategy.
@@ -38,7 +77,14 @@ def run_backtest(
     P&L model: holding +1 'spread unit' = long $1 of A and short $g of B,
     so the per-unit daily return is r_A - g * r_B. Costs are charged on the
     traded notional |Δposition| * (1 + |g|) whenever the position changes.
+
+    By default, validates that `hedge_ratio` is stable enough to safely size
+    trades with (see validate_sizing_hedge_ratio). Pass skip_hedge_validation=True
+    only for deliberate stress-testing / diagnostic work, never for production runs.
     """
+
+    if not skip_hedge_validation:
+        validate_sizing_hedge_ratio(hedge_ratio)
 
     r_a = price_a.pct_change()
     r_b = price_b.pct_change()

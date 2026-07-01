@@ -23,7 +23,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `src/pairs_teardown/backtest/costs.py` — `CostModel` dataclass; charges commission +
   slippage proportional to position changes.
 - `src/pairs_teardown/backtest/engine.py` — `run_backtest` lags target positions by one bar
-  (decision at *t*, executed at *t+1*), computes daily P&L, applies costs. 28 tests pass.
+  (decision at *t*, executed at *t+1*), computes daily P&L, applies costs. Includes
+  `validate_sizing_hedge_ratio` / `UnstableHedgeRatioError`: a runtime guard that rejects
+  any hedge ratio series with std > 0.05 or sign-instability before it can silently corrupt
+  the hedge. Pass `skip_hedge_validation=True` only for deliberate stress-test work. 35 tests pass.
 
 Still to build: `metrics/`, `plotting/`, `config.py`, `scripts/run_backtest.py`,
 `configs/pairs.yaml`.
