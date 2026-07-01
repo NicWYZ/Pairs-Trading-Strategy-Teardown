@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 3 (signals layer) is complete.** Completed so far:
+**Stage 4 (backtest engine + costs) is complete.** Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -19,15 +19,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `src/pairs_teardown/signals/spread.py` — `rolling_zscore` using trailing window only
   (no look-ahead).
 - `src/pairs_teardown/signals/rules.py` — `target_positions` with entry/exit thresholds
-  and hysteresis (holds prior position between thresholds). 20 tests pass across all
-  test files.
+  and hysteresis (holds prior position between thresholds).
+- `src/pairs_teardown/backtest/costs.py` — `CostModel` dataclass; charges commission +
+  slippage proportional to position changes.
+- `src/pairs_teardown/backtest/engine.py` — `run_backtest` lags target positions by one bar
+  (decision at *t*, executed at *t+1*), computes daily P&L, applies costs. 28 tests pass.
 
-Still to build: `backtest/` (engine + costs), `metrics/`, `plotting/`, `config.py`,
-`scripts/run_backtest.py`, `configs/pairs.yaml`.
+Still to build: `metrics/`, `plotting/`, `config.py`, `scripts/run_backtest.py`,
+`configs/pairs.yaml`.
 
-### Environment note
-macOS re-applies the `hidden` flag to `.venv` (dot-prefixed dirs). If `import pairs_teardown`
-fails, run `chflags -R nohidden .venv` to fix it.
+### Critical design note: signal hedge ratio vs. sizing hedge ratio
+
+Per PROJECT_PLAN.md §3.1, the engine uses **two distinct hedge ratio estimates**:
+- **Signal hedge ratio** (rolling window, e.g. 60-day): used to build the spread and
+  z-score. Responsiveness to drift is valuable here.
+- **Sizing hedge ratio** (static, full in-sample OLS): used to size the actual leg-level
+  trade in the engine. Stability is critical — a noisy rolling estimate whose range crosses
+  zero can flip the hedge sign, turning a market-neutral position into a large directional
+  bet. Synthetic stress tests showed +521% gross return with the stable estimate vs. -61.6%
+  with a noisy rolling one (std 0.31 on WM/RSG). See
+  `test_engine.py::test_correct_hedge_sign_neutralizes_common_move_wrong_sign_does_not`.
+
+### Environment note — `ModuleNotFoundError: No module named 'pairs_teardown'`
+
+Root cause: macOS sets the `UF_HIDDEN` flag on the venv and the files uv writes into it, and
+CPython 3.12's `site` module silently **skips hidden `.pth` files** — so uv's editable-install
+`.pth` is ignored and the package can't be imported. uv re-hides the whole `.venv` tree on
+every `uv sync`/reinstall, so any `.pth`-based fix keeps breaking. (This is the venv's own
+Python 3.12.9 — not a kernel-selection problem.)
+
+The durable fix is **`sitecustomize.py`** in site-packages: Python auto-imports it at every
+interpreter startup, and regular module import is *not* filtered by `UF_HIDDEN` (only `.pth`
+processing is). So it puts `src/` on `sys.path` even when the whole venv is hidden and even
+with no `PYTHONPATH` set — which covers the VS Code auto-discovered `.venv` kernel, `uv run`,
+and plain `python` alike. Belt-and-suspenders: `conftest.py` (repo root, git-tracked) does the
+same for `uv run pytest` and survives a full `rm -rf .venv`.
+
+`sitecustomize.py` lives inside the (gitignored) venv, so after
+`rm -rf .venv && uv sync --extra dev` run **`./scripts/fix_venv.sh`** to regenerate it. That
+script is the one command to run if imports ever break again.
 
 **`PROJECT_PLAN.md` is the authoritative build guide** — read it before adding any module.
 It specifies exact file purposes, function signatures, dependencies, and a strict build
