@@ -23,6 +23,7 @@ def download_prices(
     -------
     DataFrame with DatetimeIndex and one column per ticker (adjusted close).
     """
+    
     raw: pd.DataFrame = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False, threads=False) # type: ignore
 
     # yfinance returns MultiIndex columns when multiple tickers are passed;

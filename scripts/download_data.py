@@ -1,11 +1,13 @@
-"""Fetch and cache adjusted-close prices for all pairs in the study."""
+"""
+Fetch and cache adjusted-close prices for all pairs in the study.
+"""
 
 from pathlib import Path
 import pandas as pd
 from pairs_teardown.data.loaders import load_or_download
 from pairs_teardown.data.clean import handle_missing, align_prices
 
-PAIRS = [("WM", "RSG"), ("FOXA", "FOX"), ("SPY", "VOO")]
+PAIRS = [("WM", "RSG"), ("FOXA", "FOX"), ("SPY", "VOO"), ("KO", "PEP"),("MA", "V"), ("XOM", "CVX")]
 ALL_TICKERS = [t for pair in PAIRS for t in pair]
 START = "2015-01-01"
 END = "2024-12-31"
@@ -13,7 +15,9 @@ CACHE = Path("data/raw")
 
 
 def load_pair(a: str, b: str, prices_raw: pd.DataFrame) -> pd.DataFrame:
-    """Extract and clean one pair from the full price panel."""
+    """
+    Extract and clean one pair from the full price panel.
+    """
     pair_raw = prices_raw[[a, b]]
     return align_prices(handle_missing(pair_raw))
 

@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 
 def handle_missing(df: pd.DataFrame, max_gap: int = 3) -> pd.DataFrame:
-    """Forward-fill gaps of up to max_gap consecutive NaNs, then leave the rest.
+    """
+    Forward-fill gaps of up to max_gap consecutive NaNs, then leave the rest.
 
     Small gaps (one-day data-vendor glitches, holidays on one exchange but
     not another) are filled using the last known price. Larger gaps are
@@ -22,7 +23,8 @@ def handle_missing(df: pd.DataFrame, max_gap: int = 3) -> pd.DataFrame:
     return df.ffill(limit=max_gap)
 
 def align_prices(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop any row where at least one ticker has no price (inner join on dates).
+    """
+    Drop any row where at least one ticker has no price (inner join on dates).
 
     After this call, every row in the output has a valid price for every
     column. 
@@ -30,5 +32,7 @@ def align_prices(df: pd.DataFrame) -> pd.DataFrame:
     return df.dropna(how="any")
 
 def to_log_prices(df: pd.DataFrame) -> pd.DataFrame:
-    """Return natural log of prices."""
+    """
+    Return natural log of prices.
+    """
     return pd.DataFrame(np.log(df), index=df.index, columns=df.columns)
