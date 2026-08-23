@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 4 (backtest engine + costs) is complete.** Completed so far:
+**Stage 5 (metrics + plotting) is complete.** Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -26,10 +26,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   (decision at *t*, executed at *t+1*), computes daily P&L, applies costs. Includes
   `validate_sizing_hedge_ratio` / `UnstableHedgeRatioError`: a runtime guard that rejects
   any hedge ratio series with std > 0.05 or sign-instability before it can silently corrupt
-  the hedge. Pass `skip_hedge_validation=True` only for deliberate stress-test work. 35 tests pass.
+  the hedge. Pass `skip_hedge_validation=True` only for deliberate stress-test work.
+- `src/pairs_teardown/metrics/performance.py` — `sharpe_ratio`, `max_drawdown`, `turnover`,
+  and `summary`. All pure functions of a return/position series, so every one is closed-form
+  testable. Conventions are fixed and documented in the module docstring: simple daily
+  returns, sample std (ddof=1), NaNs dropped rather than filled, drawdown returned as a
+  signed non-positive fraction. `summary` duck-types its `result` argument (anything exposing
+  `returns`, `gross_returns`, `held_positions`) so `metrics/` has no import dependency on
+  `backtest/`, and returns `{"net": {...}, "gross": {...}}` — shaped for direct tabulation
+  into the mandatory gross-vs-net table. Hit rate is computed over *active* days only;
+  including flat days would measure trade frequency rather than edge.
+- `src/pairs_teardown/plotting/charts.py` — `plot_spread_zscore`, `plot_equity_curve`,
+  `plot_drawdown`. Each *returns* a `Figure` and never calls `plt.show` or `fig.savefig`, so
+  the caller decides display vs. save. No rcParams styling is imposed. Series are passed to
+  matplotlib via `.to_numpy()`, not `.values` — `.values` is typed as
+  `ndarray | ExtensionArray | Categorical` and fails matplotlib's `ArrayLike` protocol under
+  Pylance. `plot_equity_curve` overlays the optional gross curve on the net one so the
+  transaction-cost wedge is visible as the gap between the lines.
 
-Still to build: `metrics/`, `plotting/`, `config.py`, `scripts/run_backtest.py`,
-`configs/pairs.yaml`.
+54 tests pass (`test_metrics.py` adds 19). `charts.py` has no tests yet.
+
+Still to build: `config.py`, `scripts/run_backtest.py`, `configs/pairs.yaml` (Stage 6),
+plus tests for `plotting/`.
 
 ### Critical design note: signal hedge ratio vs. sizing hedge ratio
 
