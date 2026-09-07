@@ -490,11 +490,11 @@ Work in stages. Each stage ends with something that runs and is tested before mo
 
 ```bash
 git clone <repo-url> && cd pairs-teardown
-uv venv
-uv pip install -e ".[dev]"
-python scripts/download_data.py        # fetch + cache prices
+make install                           # uv sync --extra dev (never `uv pip install -e`)
 make test                              # all tests pass
-make run                               # full study → reports/results + reports/figures
+make run                               # fetch prices if stale, then full study
+                                       #   → reports/results + reports/figures
+make run-official                      # only the three pre-specified pairs
 # then open notebooks/04_writeup.ipynb for the narrative
 ```
 
@@ -502,11 +502,11 @@ make run                               # full study → reports/results + report
 
 ## 10. Definition of Done
 
-- [ ] `import pairs_teardown` works in a fresh `uv` environment.
-- [ ] `pytest` passes, including the look-ahead guard and hand-computed P&L tests.
-- [ ] `make run` reproduces all metrics and figures from `configs/pairs.yaml` alone.
-- [ ] Every result is reported **gross and net** and **in-sample and out-of-sample**.
-- [ ] Hedge ratio and parameters are fit on in-sample data only.
+- [x] `import pairs_teardown` works in a fresh `uv` environment.
+- [x] `pytest` passes, including the look-ahead guard and hand-computed P&L tests.
+- [x] `make run` reproduces all metrics and figures from `configs/pairs.yaml` alone.
+- [x] Every result is reported **gross and net** and **in-sample and out-of-sample**.
+- [x] Hedge ratio and parameters are fit on in-sample data only.
 - [ ] No market data is committed to git; the download script + lockfile guarantee
       reproducibility.
 - [ ] CI is green; pre-commit is installed.

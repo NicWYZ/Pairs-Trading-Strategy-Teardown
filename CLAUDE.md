@@ -4,15 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 5 (metrics + plotting) is complete.** Completed so far:
+**Stage 6 (orchestration) is complete.** The study now runs end-to-end from the config
+with one command. Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
   re-running is safe.
 - `src/pairs_teardown/data/clean.py` — align/clean logic (drops NaN-only rows, handles
   FOXA/FOX which only trades from 2019-03-13 onward after the Disney deal closed).
-- `scripts/download_data.py` — entry point; prints per-pair summaries after cleaning.
-- Raw data cached at `data/raw/FOX_FOXA_RSG_SPY_VOO_WM_20150101_20241231.parquet`.
+- Raw data cached at
+  `data/raw/CVX_FOX_FOXA_KO_MA_PEP_RSG_SPY_V_VOO_WM_XOM_20150101_20241231.parquet`
+  (all 12 tickers are always fetched together so the cache key stays stable).
 - `src/pairs_teardown/stats/cointegration.py` — `estimate_hedge_ratio` (OLS, IS window only),
   `build_spread`, `adf_pvalue`, `engle_granger_pvalue`, and `analyze_pair` (bundles all four
   into a `CointegrationResult` dataclass).
@@ -43,11 +45,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `ndarray | ExtensionArray | Categorical` and fails matplotlib's `ArrayLike` protocol under
   Pylance. `plot_equity_curve` overlays the optional gross curve on the net one so the
   transaction-cost wedge is visible as the gap between the lines.
+- `src/pairs_teardown/config.py` — `load_config` parses `configs/pairs.yaml` into frozen
+  dataclasses and *validates* it. Validation is not decorative: it rejects `entry <= exit`
+  (incoherent hysteresis), a split date outside the data range (one evaluation period would
+  be empty), duplicate pair names, and — hard-coded — `sizing_hedge: "rolling"`, which is
+  the one misconfiguration that silently destroys market neutrality. `SplitConfig` owns
+  `is_mask`/`oos_mask` so the IS/OOS boundary is defined in exactly one place.
+- `configs/pairs.yaml` — single source of truth for every parameter, and committed, so it
+  doubles as the record of what was run. Pairs are split into `official` (the three
+  pre-specified) and `sanity_check` (added later, reported separately and labelled) so
+  adding pairs can never be mistaken for a search over tickers.
+- `scripts/run_backtest.py` — the reproduction entry point. **It fits the static sizing
+  hedge ratio on the in-sample window only**, then freezes it for the OOS period; the
+  exploratory notebooks fit on the full sample, which leaks. It writes
+  `reports/results/metrics.csv` (long-form: pair x period x gross/net), a
+  `run_manifest.json` recording parameters + hedge ratios + timestamp, and three figures
+  per pair. `--official-only` filters which pairs are *run*, never which are *cached*, so
+  the loader's cache key stays stable.
+- `scripts/download_data.py` — now config-driven (`--config`) rather than hardcoding
+  tickers; still prints per-pair summaries after cleaning.
+- `scripts/cache_path.py` — prints the loader's parquet cache path for a config, so the
+  Makefile can express the pipeline's dependency graph without hardcoding a filename that
+  would go stale.
+- `Makefile` — `install/test/lint/typecheck/run/run-official/clean/clean-data`. File targets
+  encode the dependency graph, so `make run` re-runs only what is stale. Two non-obvious
+  details, both load-bearing: `PYTHON := uv run python` (a bare `python` resolves to conda's
+  and cannot import the package), and the download rule ends in `touch $@` (the loader
+  returns a cache hit *without* touching the parquet, so without it the rule re-fires on
+  every invocation and `make run` is never incremental).
 
-54 tests pass (`test_metrics.py` adds 19). `charts.py` has no tests yet.
+69 tests pass (`test_config.py` adds 15). `charts.py` and `scripts/` have no tests yet.
+`make lint` and `make typecheck` are both clean (a `[tool.mypy]` section with
+`ignore_missing_imports` was added to `pyproject.toml`, per PROJECT_PLAN §6).
 
-Still to build: `config.py`, `scripts/run_backtest.py`, `configs/pairs.yaml` (Stage 6),
-plus tests for `plotting/`.
+Latest run (net total return %, IS vs OOS): every official pair is negative after costs —
+WM/RSG -8.8/-10.8, FOXA/FOX -5.6/-1.8, SPY/VOO -5.4/-3.3. That is the expected teardown
+finding, not a bug.
+
+Still to build: Stage 7 (`03_backtest_results.ipynb` tables, `04_writeup.ipynb` narrative),
+Stage 8 (pre-commit, CI, README, `uv lock`), plus tests for `plotting/` and the scripts.
 
 ### Critical design note: signal hedge ratio vs. sizing hedge ratio
 
@@ -95,17 +131,23 @@ expected, correct result — treat it as a finding to report, not a bug to fix.
 
 ## Commands
 
-No `Makefile` exists yet (see PROJECT_PLAN.md §5 for the planned `make install/test/lint/data/run`
-wrappers). Until it's added, use the underlying tools directly:
+The `Makefile` is the entry point; every target shells out through `uv run python`.
 
 ```bash
-uv sync --extra dev           # install/sync all deps including dev (preferred over uv pip install -e)
-uv run python scripts/download_data.py   # fetch + cache raw prices
-pytest                        # run all tests (testpaths = ["tests"])
-pytest tests/test_engine.py -k look_ahead   # run a single test
-ruff check .                  # lint
-mypy src                      # type check
+make install        # uv sync --extra dev  (NOT uv pip install -e; see gotchas below)
+make run            # full study: download if stale, then all pairs -> reports/
+make run-official   # only the three pre-specified pairs
+make test           # pytest -q
+make lint           # ruff check src tests scripts
+make typecheck      # mypy src
+make clean          # wipe reports/ (keeps the cached prices)
+make clean-data     # also wipe data/raw/*.parquet -- forces a re-download
 ```
+
+`make run` is incremental: it re-runs the backtest only if the config, the package source,
+or the cached prices changed. To force a re-run, `make clean` first.
+
+For a single test, bypass make: `uv run pytest tests/test_engine.py -k look_ahead`.
 
 ### Environment gotchas
 
@@ -142,11 +184,12 @@ under `src/pairs_teardown/`:
   proportional to position changes.
 - `metrics/performance.py` — Sharpe, max drawdown, turnover, summary stats.
 - `plotting/charts.py` — spread/z-score, equity curve, drawdown figures for notebooks/reports.
-- `config.py` (not yet created) — loads `configs/pairs.yaml` into a typed config
+- `config.py` — loads `configs/pairs.yaml` into a typed, validated config
   (pairs, date ranges, z-score window, entry/exit thresholds, cost params, IS/OOS split date).
 
-Orchestration is config-driven: `scripts/run_backtest.py` (not yet created) reads
-`configs/pairs.yaml` and runs the full chain for all three pairs, writing a metrics CSV to
+Orchestration is config-driven: `scripts/run_backtest.py` reads
+`configs/pairs.yaml` and runs the full chain for every configured pair (`--official-only`
+restricts it to the three pre-specified ones), writing a metrics CSV plus a run manifest to
 `reports/results/` and figures to `reports/figures/`. `data/` and `reports/{figures,results}/`
 are gitignored except `.gitkeep` — never commit market data or generated outputs.
 

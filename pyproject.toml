@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "pre-commit>=3.7", "pandas-stubs>=2.0"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "pre-commit>=3.7", "pandas-stubs>=2.0", "types-PyYAML>=6.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -24,6 +24,10 @@ packages = ["src/pairs_teardown"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true   # third-party stubs (statsmodels, yfinance) are incomplete
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -14,7 +14,6 @@ import pytest
 
 from pairs_teardown.stats.cointegration import (
     adf_pvalue,
-    analyze_pair,
     build_spread,
     estimate_hedge_ratio,
     engle_granger_pvalue,

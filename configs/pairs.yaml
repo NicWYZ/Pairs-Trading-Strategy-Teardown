@@ -1,0 +1,105 @@
+# ---------------------------------------------------------------------------
+# Pairs-trading teardown — study configuration.
+#
+# This file is the single source of truth for every parameter in the study.
+# It is committed to git, so it doubles as a record of WHAT WAS RUN.
+#
+# PARAMETER DISCIPLINE (see PROJECT_PLAN Section 8):
+#   - `window`, `entry`, `exit` are PRE-REGISTERED and FROZEN. They were chosen
+#     a priori (60 = a conventional quarter-year lookback; 2.0/0.5 = textbook
+#     entry/exit bands), NOT selected by looking at returns. Do not change them
+#     on the basis of the window-sensitivity sweep — that sweep is a reported
+#     finding, not a parameter search.
+#   - Cost parameters MAY be varied freely. Re-pricing the same trades under
+#     different frictions is not fitting to data.
+#   - The out-of-sample period is evaluated EXACTLY ONCE with these frozen.
+# ---------------------------------------------------------------------------
+
+data:
+  start: "2015-01-01"
+  end: "2024-12-31"
+  # Adjusted close (yfinance auto_adjust=True) accounts for splits and
+  # dividends; log prices are taken downstream, since multiplicative growth
+  # breaks stationarity on levels.
+  price_field: "adj_close"
+  cache_dir: "data/raw"
+
+# ---------------------------------------------------------------------------
+# The IS/OOS split. Everything estimated from data — the static sizing hedge
+# ratio above all — is fit on the in-sample window ONLY. The out-of-sample
+# window is scored once, with all parameters frozen.
+#
+# 2021-12-31 gives ~7 years in-sample and ~3 years out-of-sample. It is a round
+# date picked for its position in the sample, not for anything it does to the
+# results (defensibility test, Section 5.11).
+# ---------------------------------------------------------------------------
+split:
+  in_sample_end: "2021-12-31"
+
+signal:
+  # Rolling window (trading days) for both the rolling signal hedge ratio and
+  # the rolling z-score mean/std.
+  window: 60
+  entry: 2.0
+  exit: 0.5
+
+  # Hedge-ratio specification, deliberately decoupled:
+  #   signal_hedge = "rolling" — ADF-justified; static-hedge spreads fail
+  #       stationarity for WM/RSG (p~0.10) and FOXA/FOX (p~0.29).
+  #   sizing_hedge = "static"  — a noisy rolling estimate that approaches zero
+  #       destroys market neutrality.
+  signal_hedge: "rolling"
+  sizing_hedge: "static"
+
+  # Guard on the sizing hedge ratio: it is *defined* to be constant, so its std
+  # is exactly 0 by construction. Any drift above this epsilon means a rolling
+  # series was wired into the sizing path. Justified by the estimator's
+  # definition, NOT calibrated against the study's data. Matches the default in
+  # engine.validate_sizing_hedge_ratio.
+  sizing_hedge_max_std: 0.05
+
+costs:
+  commission_bps: 1.0
+  slippage_bps: 5.0
+
+backtest:
+  periods_per_year: 252
+
+# ---------------------------------------------------------------------------
+# Pairs. `official` were pre-specified from economic reasoning BEFORE any
+# backtesting. `sanity_check` were added later as additional evidence; they are
+# reported separately and labelled, so adding them cannot be mistaken for (or
+# become) a search over tickers.
+# ---------------------------------------------------------------------------
+pairs:
+  official:
+    - name: "WM/RSG"
+      a: "WM"
+      b: "RSG"
+      rationale: "Economic duopoly in North American waste collection."
+    - name: "FOXA/FOX"
+      a: "FOXA"
+      b: "FOX"
+      rationale: "Two share classes of the same company; near-mechanical linkage."
+    - name: "SPY/VOO"
+      a: "SPY"
+      b: "VOO"
+      rationale: "Near-degenerate control: same index, different wrapper."
+
+  sanity_check:
+    - name: "KO/PEP"
+      a: "KO"
+      b: "PEP"
+      rationale: "Beverage duopoly."
+    - name: "MA/V"
+      a: "MA"
+      b: "V"
+      rationale: "Card-network duopoly."
+    - name: "XOM/CVX"
+      a: "XOM"
+      b: "CVX"
+      rationale: "Integrated oil majors, common commodity factor."
+
+output:
+  results_dir: "reports/results"
+  figures_dir: "reports/figures"
