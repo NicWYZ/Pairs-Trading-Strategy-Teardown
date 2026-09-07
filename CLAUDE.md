@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 6 (orchestration) is complete.** The study now runs end-to-end from the config
-with one command. Completed so far:
+**Stage 7 (analysis & writeup) is complete.** The study runs end-to-end from the config,
+and the results and narrative notebooks are written. Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -55,13 +55,19 @@ with one command. Completed so far:
   doubles as the record of what was run. Pairs are split into `official` (the three
   pre-specified) and `sanity_check` (added later, reported separately and labelled) so
   adding pairs can never be mistaken for a search over tickers.
-- `scripts/run_backtest.py` — the reproduction entry point. **It fits the static sizing
-  hedge ratio on the in-sample window only**, then freezes it for the OOS period; the
-  exploratory notebooks fit on the full sample, which leaks. It writes
-  `reports/results/metrics.csv` (long-form: pair x period x gross/net), a
-  `run_manifest.json` recording parameters + hedge ratios + timestamp, and three figures
-  per pair. `--official-only` filters which pairs are *run*, never which are *cached*, so
-  the loader's cache key stays stable.
+- `src/pairs_teardown/study.py` — the pipeline chain: `run_pair`, `run_study`, `to_frame`.
+  **It fits the static sizing hedge ratio on the in-sample window only**, then freezes it
+  across the split; `03_backtest_explore.ipynb` fits on the full sample, which leaks. This
+  lives in the package rather than in `scripts/` for two reasons: notebooks import the
+  chain instead of reimplementing it (reimplementing it inline is exactly how notebook 03
+  acquired its leak), and the discipline is testable. `to_frame` carries the
+  official/sanity_check group label into every row, so a later-added pair cannot be
+  tabulated as if it had been pre-specified.
+- `scripts/run_backtest.py` — the reproduction entry point, now only argparse + file
+  writing over `study.py`. Writes `reports/results/metrics.csv` (long-form: pair x period
+  x gross/net), a `run_manifest.json` recording parameters + hedge ratios + timestamp, and
+  three figures per pair. `--official-only` filters which pairs are *run*, never which are
+  *cached*, so the loader's cache key stays stable.
 - `scripts/download_data.py` — now config-driven (`--config`) rather than hardcoding
   tickers; still prints per-pair summaries after cleaning.
 - `scripts/cache_path.py` — prints the loader's parquet cache path for a config, so the
@@ -73,17 +79,35 @@ with one command. Completed so far:
   and cannot import the package), and the download rule ends in `touch $@` (the loader
   returns a cache hit *without* touching the parquet, so without it the rule re-fires on
   every invocation and `make run` is never incremental).
+- `notebooks/03_backtest_explore.ipynb` — **superseded**, kept deliberately. Predates the
+  pipeline, reimplements it inline, and fits the sizing hedge on the *full* sample with no
+  IS/OOS split, so its numbers are diagnostics, not findings; its header says so. Still the
+  source for the COVID/2024 spike attributions and the window sweeps.
+- `notebooks/04_backtest_results.ipynb` — the authoritative results. Reads `metrics.csv` +
+  `run_manifest.json` (so it cannot disagree with the pipeline), tabulates gross-vs-net and
+  IS-vs-OOS, reconciles the cost drag against `turnover x (1+|g|) x bps` (actual/predicted
+  lands in 0.966-0.998, which is the evidence that the cost story is arithmetic and not an
+  unexplained residual), reports sanity-check pairs in a separate labelled table, and
+  regenerates figures through `study.run_study`.
+- `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles.
+  Its strongest section is the window-sensitivity sweep: varying *only* the z-score window
+  over {40,50,60,75,90,120}, the pre-registered 60 gives 0 of 3 official pairs profitable
+  OOS while 75 gives 2 of 3 (WM/RSG alone swings -18.2% to +9.5%). That is the
+  data-snooping argument made concrete, and it is reported as a finding about instability,
+  never used to pick a window.
 
-69 tests pass (`test_config.py` adds 15). `charts.py` and `scripts/` have no tests yet.
+82 tests pass (`test_study.py` adds 13). `charts.py` and `scripts/` have no direct tests;
+the logic that used to sit in `scripts/run_backtest.py` is now covered via `study.py`.
 `make lint` and `make typecheck` are both clean (a `[tool.mypy]` section with
 `ignore_missing_imports` was added to `pyproject.toml`, per PROJECT_PLAN §6).
 
 Latest run (net total return %, IS vs OOS): every official pair is negative after costs —
 WM/RSG -8.8/-10.8, FOXA/FOX -5.6/-1.8, SPY/VOO -5.4/-3.3. That is the expected teardown
-finding, not a bug.
+finding, not a bug. The single profitable pair in the study is KO/PEP (+14.1% net OOS),
+which is a *sanity-check* pair, not a pre-specified one — that asymmetry is discussed in
+the writeup rather than smoothed over.
 
-Still to build: Stage 7 (`03_backtest_results.ipynb` tables, `04_writeup.ipynb` narrative),
-Stage 8 (pre-commit, CI, README, `uv lock`), plus tests for `plotting/` and the scripts.
+Still to build: Stage 8 (pre-commit, CI, README, `uv lock`), plus tests for `plotting/`.
 
 ### Critical design note: signal hedge ratio vs. sizing hedge ratio
 
@@ -186,11 +210,13 @@ under `src/pairs_teardown/`:
 - `plotting/charts.py` — spread/z-score, equity curve, drawdown figures for notebooks/reports.
 - `config.py` — loads `configs/pairs.yaml` into a typed, validated config
   (pairs, date ranges, z-score window, entry/exit thresholds, cost params, IS/OOS split date).
+- `study.py` — `run_pair`/`run_study`/`to_frame`: the chain above, assembled. Notebooks and
+  scripts both go through this; neither reimplements it.
 
-Orchestration is config-driven: `scripts/run_backtest.py` reads
-`configs/pairs.yaml` and runs the full chain for every configured pair (`--official-only`
-restricts it to the three pre-specified ones), writing a metrics CSV plus a run manifest to
-`reports/results/` and figures to `reports/figures/`. `data/` and `reports/{figures,results}/`
+Orchestration is config-driven: `scripts/run_backtest.py` reads `configs/pairs.yaml` and
+calls `study.run_study` for every configured pair (`--official-only` restricts it to the
+three pre-specified ones), writing a metrics CSV plus a run manifest to `reports/results/`
+and figures to `reports/figures/`. `data/` and `reports/{figures,results}/`
 are gitignored except `.gitkeep` — never commit market data or generated outputs.
 
 ## Non-negotiable methodological rules
@@ -198,9 +224,11 @@ are gitignored except `.gitkeep` — never commit market data or generated outpu
 These five principles drive every design decision and are explicitly tested, not just stated:
 
 1. **No look-ahead bias.** Positions are lagged by one bar in the engine; hedge ratio and
-   z-score parameters are estimated on the in-sample window only. Enforced by a dedicated
-   look-ahead guard test in `test_engine.py` (altering a future price must not change any
-   past P&L value).
+   z-score parameters are estimated on the in-sample window only. Enforced by two guard
+   tests, not by convention: `test_engine.py` (altering a future price must not change any
+   past P&L value) and `test_study.py` (shocking out-of-sample prices must not move the
+   fitted sizing hedge ratio, or any in-sample metric). Both fail if the discipline is
+   removed — verified by reintroducing a full-sample fit and watching them go red.
 2. **Survivorship bias** is acknowledged in the writeup, not engineered around.
 3. **No data-snooping.** The three pairs are pre-specified from economic reasoning, not
    mined by scanning combinations. Only a small, pre-declared parameter grid is tuned, and

@@ -154,6 +154,7 @@ pairs-teardown/
 │   └── pairs_teardown/           # the importable package
 │       ├── __init__.py
 │       ├── config.py             # load + validate the YAML config
+│       ├── study.py              # run a configured pair end-to-end; tabulate runs
 │       ├── data/
 │       │   ├── __init__.py
 │       │   ├── loaders.py        # download prices (yfinance) + cache to parquet
@@ -183,12 +184,15 @@ pairs-teardown/
 │   ├── test_rules.py
 │   ├── test_engine.py            # *** look-ahead guard + hand-computed P&L ***
 │   ├── test_costs.py
-│   └── test_metrics.py
+│   ├── test_metrics.py
+│   ├── test_config.py
+│   └── test_study.py             # *** in-sample-only hedge leak guard ***
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
 │   ├── 02_cointegration_analysis.ipynb
-│   ├── 03_backtest_results.ipynb
-│   └── 04_writeup.ipynb          # final narrative + honest conclusions
+│   ├── 03_backtest_explore.ipynb   # exploratory, superseded — kept for diagnostics
+│   ├── 04_backtest_results.ipynb   # authoritative results tables + figures
+│   └── 05_writeup.ipynb            # final narrative + honest conclusions
 ├── configs/
 │   └── pairs.yaml                # tickers, dates, thresholds, costs, IS/OOS split
 ├── scripts/
@@ -270,6 +274,12 @@ references tool repos.
 
 **`__init__.py`** (top level) — marks the package; may expose a tiny curated API (e.g.
 `from .config import load_config`). Can be nearly empty.
+
+**`study.py`** — the pipeline chain in one place: `run_pair` (prices -> spread -> z-score
+-> positions -> backtest -> metrics for all three periods), `run_study`, and `to_frame`.
+Lives in the package, not in `scripts/`, so that notebooks import the chain instead of
+reimplementing it and so that the in-sample-only hedge fit is under test. **The static
+sizing hedge ratio is fit on in-sample rows only, then frozen across the split.**
 
 **`config.py`** — loads and validates `configs/pairs.yaml` into typed objects.
 Packages: `pyyaml`, `dataclasses` (stdlib), `pathlib` (stdlib).
@@ -356,6 +366,10 @@ Packages: `pytest`, `pandas`, `numpy`, plus the package under test.
   hand matches the engine to the cent, including costs.
 - **`test_costs.py`** — zero turnover ⇒ zero cost; cost scales linearly with position change.
 - **`test_metrics.py`** — Sharpe/drawdown match closed-form values on a constructed series.
+- **`test_study.py`** — **the second keystone test**: shocking out-of-sample prices must
+  leave the fitted static sizing hedge ratio, and every in-sample metric, unchanged. A
+  full-sample fit fails it. Without this, the in-sample-only discipline is guaranteed by
+  a docstring alone.
 
 ### Notebooks: `notebooks/` (thin — import from the package)
 
@@ -363,10 +377,20 @@ Packages: `pytest`, `pandas`, `numpy`, plus the package under test.
   sanity-check ranges and gaps.
 - **`02_cointegration_analysis.ipynb`** — for each pair: hedge ratio, Engle–Granger/ADF
   p-values, plot spread and z-score. Discuss which pairs are cointegrated and how stably.
-- **`03_backtest_results.ipynb`** — run all three pairs, tabulate gross-vs-net and
-  IS-vs-OOS metrics, plot equity curves and drawdowns.
-- **`04_writeup.ipynb`** — the narrative: methodology, results, and the honest conclusion,
-  explicitly addressing the five principles in Section 3.
+- **`03_backtest_explore.ipynb`** — exploratory work that predates the orchestration
+  layer. It fits the sizing hedge ratio on the **full sample** and does not split IS/OOS,
+  so its numbers are **not results**; its header says so. Kept, not deleted, for the
+  diagnostics it does carry: the COVID and 2024 spike attributions, and the window
+  sensitivity sweeps.
+- **`04_backtest_results.ipynb`** — the authoritative results. Reads
+  `reports/results/metrics.csv` and `run_manifest.json` (so it cannot disagree with what
+  the pipeline computed), tabulates gross-vs-net and IS-vs-OOS for the pre-specified pairs,
+  reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the sanity-check
+  pairs separately, and regenerates equity/drawdown figures via `pairs_teardown.study`.
+- **`05_writeup.ipynb`** — the narrative: methodology, results, and the honest conclusion,
+  organized around the five principles in Section 3. States the survivorship and
+  data-snooping positions explicitly, and includes the window-sensitivity sweep that shows
+  what a single unfrozen parameter would have been worth.
 
 ### Config, scripts, data, reports
 
@@ -472,17 +496,26 @@ Work in stages. Each stage ends with something that runs and is tested before mo
     CSV and figures. Confirm `make run` reproduces results end-to-end from the config.
 
 ### Stage 7 — Analysis & writeup
-19. `03_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for all three pairs;
-    equity-curve and drawdown plots.
-20. `04_writeup.ipynb`: the honest narrative, organized around the five principles. State
+19. Extract the pipeline chain from `scripts/run_backtest.py` into
+    `src/pairs_teardown/study.py` (`run_pair`, `run_study`, `to_frame`), leaving the script
+    as a CLI + IO wrapper. Notebooks must import the chain, never reimplement it — that is
+    how `03_backtest_explore.ipynb` ended up with a full-sample hedge fit. Add
+    `tests/test_study.py`, including the leak guard: shocking out-of-sample prices must not
+    move the fitted sizing hedge ratio or any in-sample metric.
+20. Rename the old `03_backtest_results.ipynb` to `03_backtest_explore.ipynb` and label it
+    superseded in its header, so its full-sample numbers can never be quoted as findings.
+21. `04_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for the three
+    pre-specified pairs, the cost-drag reconciliation, the sanity-check pairs in a separate
+    labelled table, and equity-curve and drawdown plots.
+22. `05_writeup.ipynb`: the honest narrative, organized around the five principles. State
     the survivorship and data-snooping positions explicitly. Let the results say what they
     say — a decay to zero after costs is the expected, valid result.
 
 ### Stage 8 — Engineering polish
-21. Add `.pre-commit-config.yaml` and run `pre-commit install`.
-22. Add `.github/workflows/ci.yml`; confirm the badge goes green.
-23. Write `README.md` (short public version: what, why, how to run, headline finding).
-24. `uv lock` to pin versions.
+23. Add `.pre-commit-config.yaml` and run `pre-commit install`.
+24. Add `.github/workflows/ci.yml`; confirm the badge goes green.
+25. Write `README.md` (short public version: what, why, how to run, headline finding).
+26. `uv lock` to pin versions.
 
 ---
 
@@ -495,7 +528,8 @@ make test                              # all tests pass
 make run                               # fetch prices if stale, then full study
                                        #   → reports/results + reports/figures
 make run-official                      # only the three pre-specified pairs
-# then open notebooks/04_writeup.ipynb for the narrative
+# then open notebooks/04_backtest_results.ipynb for the tables,
+#      and notebooks/05_writeup.ipynb for the narrative
 ```
 
 ---
@@ -510,7 +544,7 @@ make run-official                      # only the three pre-specified pairs
 - [ ] No market data is committed to git; the download script + lockfile guarantee
       reproducibility.
 - [ ] CI is green; pre-commit is installed.
-- [ ] `04_writeup.ipynb` states the honest conclusion and explicitly addresses survivorship
+- [x] `05_writeup.ipynb` states the honest conclusion and explicitly addresses survivorship
       bias and data-snooping.
 
 ---
