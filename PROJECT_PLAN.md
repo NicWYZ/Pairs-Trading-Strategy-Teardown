@@ -210,8 +210,8 @@ pairs-teardown/
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
 │   ├── 02_cointegration_analysis.ipynb
-│   ├── 03_backtest_explore.ipynb   # exploratory, superseded — kept for diagnostics
-│   ├── 04_backtest_results.ipynb   # authoritative results tables + figures
+│   ├── 03_backtest_results.ipynb   # authoritative results tables + figures
+│   ├── 04_sensitivity_analysis.ipynb  # every frozen parameter, swept
 │   └── 05_writeup.ipynb            # final narrative + honest conclusions
 ├── configs/
 │   └── pairs.yaml                # tickers, dates, thresholds, costs, IS/OOS split
@@ -400,21 +400,23 @@ Packages: `pytest`, `pandas`, `numpy`, plus the package under test.
   check ranges and gaps.
 - **`02_cointegration_analysis.ipynb`** — for each pair: hedge ratio, Engle–Granger/ADF
   p-values, plot spread and z-score. Discuss which pairs are cointegrated and how stably.
-- **`03_backtest_explore.ipynb`** — exploratory work that predates the orchestration
-  layer. It fits the sizing hedge ratio on the **full sample** and does not split IS/OOS,
-  so its numbers are **not results**; its header says so. Kept, not deleted, for the
-  diagnostics it does carry: the COVID and 2024 spike attributions, and the window
-  sensitivity sweeps.
-- **`04_backtest_results.ipynb`** — the authoritative results. Reads
-  `reports/results/metrics.csv` and `run_manifest.json` (so it cannot disagree with what
-  the pipeline computed), tabulates gross-vs-net and IS-vs-OOS for the pre-specified pairs,
-  reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the cross-sectional
-  dispersion that is the study's actual finding, and regenerates equity/drawdown figures via
-  `pairs_teardown.study`.
+- **`03_backtest_results.ipynb`** — the authoritative results. Reads
+  `reports/results/metrics.csv` and `run_manifest.json` (so it cannot disagree with what the
+  pipeline computed), tabulates gross-vs-net and IS-vs-OOS for every pair, reconciles the
+  cost drag against `turnover x (1+|g|) x bps`, reports the cross-sectional dispersion that
+  is the study's actual finding, and regenerates equity/drawdown figures via
+  `pairs_teardown.study`. Contains **no** robustness checks — those are notebook 04, kept
+  separate so results and sensitivity cannot be mistaken for one another.
+- **`04_sensitivity_analysis.ipynb`** — every frozen parameter varied one at a time through
+  the same `run_pair`: z-score window, entry/exit bands, cost level (including a per-pair
+  breakeven), split date, and rolling-vs-static signal hedge. Writes
+  `reports/results/sensitivity.csv`, which notebook 05 reads rather than transcribing.
+  Explicitly **not** a parameter search: nothing here may feed back into
+  `configs/pairs.yaml`, since adopting a swept value would convert an out-of-sample result
+  into an in-sample one.
 - **`05_writeup.ipynb`** — the narrative: methodology, results, and the honest conclusion,
   organized around the five principles in Section 3. States the survivorship and
-  data-snooping positions explicitly, and includes the window-sensitivity sweep that shows
-  what a single unfrozen parameter would have been worth.
+  data-snooping positions explicitly, and cites (not recomputes) notebooks 02 and 04.
 
 ### Config, scripts, data, reports
 
@@ -523,14 +525,17 @@ Work in stages. Each stage ends with something that runs and is tested before mo
 19. Extract the pipeline chain from `scripts/run_backtest.py` into
     `src/pairs_teardown/study.py` (`run_pair`, `run_study`, `to_frame`), leaving the script
     as a CLI + IO wrapper. Notebooks must import the chain, never reimplement it — that is
-    how `03_backtest_explore.ipynb` ended up with a full-sample hedge fit. Add
+    how the old exploratory notebook ended up with a full-sample hedge fit. Add
     `tests/test_study.py`, including the leak guard: shocking out-of-sample prices must not
     move the fitted sizing hedge ratio or any in-sample metric.
-20. Rename the old `03_backtest_results.ipynb` to `03_backtest_explore.ipynb` and label it
-    superseded in its header, so its full-sample numbers can never be quoted as findings.
-21. `04_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for every pair, the
+20. Retire the exploratory backtest notebook. Its full-sample hedge fit and un-split sample
+    mean its numbers can never be quoted as findings; replace it rather than keep it.
+21. `03_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for every pair, the
     cost-drag reconciliation, the cross-sectional dispersion statistics, and equity-curve
-    and drawdown plots.
+    and drawdown plots. Results only — no sweeps.
+21b. `04_sensitivity_analysis.ipynb`: sweep every frozen parameter one at a time and write
+    `reports/results/sensitivity.csv`. Sensitivity lives *after* the results notebook,
+    because it is a check on them, not an input to them.
 22. `05_writeup.ipynb`: the honest narrative, organized around the five principles. State
     the survivorship and data-snooping positions explicitly. Let the results say what they
     say — a decay to zero after costs is the expected, valid result.
@@ -552,7 +557,8 @@ make test                              # all tests pass
 make run                               # fetch prices if stale, then full study
                                        #   → reports/results + reports/figures
 make notebooks                         # execute every notebook to check it still runs
-# then open notebooks/04_backtest_results.ipynb for the tables,
+# then open notebooks/03_backtest_results.ipynb for the tables,
+#      notebooks/04_sensitivity_analysis.ipynb for the robustness checks,
 #      and notebooks/05_writeup.ipynb for the narrative
 ```
 

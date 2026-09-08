@@ -62,7 +62,7 @@ regression, not a stylistic choice. Completed so far:
   removing one after seeing its result is the single thing that would invalidate the study.
 - `src/pairs_teardown/study.py` — the pipeline chain: `run_pair`, `run_study`, `to_frame`.
   **It fits the static sizing hedge ratio on the in-sample window only**, then freezes it
-  across the split; `03_backtest_explore.ipynb` fits on the full sample, which leaks. This
+  across the split; the retired exploratory notebook fit on the full sample, which leaks. This
   lives in the package rather than in `scripts/` for two reasons: notebooks import the
   chain instead of reimplementing it (reimplementing it inline is exactly how notebook 03
   acquired its leak), and the discipline is testable. `run_study` has no subset argument
@@ -84,22 +84,28 @@ regression, not a stylistic choice. Completed so far:
   and cannot import the package), and the download rule ends in `touch $@` (the loader
   returns a cache hit *without* touching the parquet, so without it the rule re-fires on
   every invocation and `make run` is never incremental).
-- `notebooks/03_backtest_explore.ipynb` — **superseded**, kept deliberately. Predates the
-  pipeline, reimplements it inline, and fits the sizing hedge on the *full* sample with no
-  IS/OOS split, so its numbers are diagnostics, not findings; its header says so. Still the
-  source for the COVID/2024 spike attributions and the window sweeps.
-- `notebooks/04_backtest_results.ipynb` — the authoritative results. Reads `metrics.csv` +
+- `notebooks/01_data_exploration.ipynb` — coverage, price levels, return correlation and
+  trading-day alignment for all 10 pairs. Config-driven, not a hardcoded ticker list.
+- `notebooks/02_cointegration_analysis.ipynb` — **the key diagnostic.** Tests cointegration
+  separately in-sample and out-of-sample: 3/10 pass in-sample, 3/10 out-of-sample, but only
+  **1/10 (MA/V) in both**. The property the whole method assumes does not persist. Also shows
+  UPS/FDX's hedge ratio changing *sign* across the split (+0.84 -> -0.35), which is why it is
+  the worst performer. Selecting pairs on these p-values would be data-snooping, so nothing
+  here filters the universe — they are diagnostics that explain the backtest.
+- `notebooks/03_backtest_results.ipynb` — the authoritative results. Reads `metrics.csv` +
   `run_manifest.json` (so it cannot disagree with the pipeline), tabulates gross-vs-net and
-  IS-vs-OOS, reconciles the cost drag against `turnover x (1+|g|) x bps` (actual/predicted
-  lands in 0.966-0.998, which is the evidence that the cost story is arithmetic and not an
-  unexplained residual), reports the cross-sectional dispersion statistics that are the
-  study's actual finding, and regenerates figures through `study.run_study`.
-- `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles. Its
-  §2.3 documents the removal of the pair tiers as a methodological error the study made and
-  corrected. Its §2.6 window sweep is the sharpest evidence: 9 of 10 pairs change sign
-  across {40,50,60,75,90,120}, and the pre-registered 60 is the *only* window of the six
-  with a positive cross-sectional mean — so the headline +0.6% is the best case, not the
-  central case. Reported as a finding about instability, never used to pick a window.
+  IS-vs-OOS, reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the
+  cross-sectional dispersion, regenerates figures through `study.run_study`. **Results only —
+  no sweeps**, deliberately, so results and robustness cannot be confused.
+- `notebooks/04_sensitivity_analysis.ipynb` — every frozen parameter swept one at a time
+  through the same `run_pair`: window, entry/exit bands, cost (with per-pair breakeven),
+  split date, rolling-vs-static signal hedge. Writes `reports/results/sensitivity.csv`,
+  which notebook 05 **reads rather than transcribes** — same one-source discipline as
+  metrics.csv. Nothing here may feed back into the config: adopting a swept value would turn
+  an out-of-sample result into an in-sample one.
+- `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles. §2.3
+  documents the removal of the pair tiers as an error the study made and corrected; §2.3b
+  carries the cointegration-persistence finding; §2.6 cites notebook 04.
 - `.pre-commit-config.yaml` — ruff, ruff-format, nbstripout, plus whitespace/large-file
   checks. Fast hooks only; pytest and mypy stay in CI, because a slow commit hook gets
   bypassed and a bypassed hook enforces nothing. **nbstripout means committed notebooks
@@ -109,7 +115,7 @@ regression, not a stylistic choice. Completed so far:
 - `README.md` — the public-facing summary: the finding, how to run it, and where the five
   rules are enforced.
 
-83 tests pass. `charts.py` has no direct tests; the logic that used to sit in
+85 tests pass. `charts.py` has no direct tests; the logic that used to sit in
 `scripts/run_backtest.py` is now covered via `study.py`. `make lint`, `make typecheck` and
 `ruff format --check` are all clean.
 
@@ -125,6 +131,12 @@ average effect, and any small-universe study reports whatever its pair selection
 **Do not "fix" this back into a clean negative result.** Reverting to a smaller or tiered
 universe would restore a tidier headline by discarding the evidence that the headline was
 never stable.
+
+**Notebook order is `01 data -> 02 cointegration -> 03 results -> 04 sensitivity -> 05
+writeup`.** Sensitivity comes *after* results because it is a check on them, not an input.
+Notebook 05 depends on notebook 04 having run (it reads `sensitivity.csv`); `make notebooks`
+executes them in order, so this only bites if 05 is opened standalone, and it fails with a
+message saying so rather than silently.
 
 Remaining gap: `plotting/charts.py` still has no tests.
 
@@ -151,7 +163,12 @@ new pairs"), that is the failure mode these guards exist to catch. Report all pa
 
 Per PROJECT_PLAN.md §3.1, the engine uses **two distinct hedge ratio estimates**:
 - **Signal hedge ratio** (rolling window, e.g. 60-day): used to build the spread and
-  z-score. Responsiveness to drift is valuable here.
+  z-score. Responsiveness to drift is valuable here. Selected by `signal.signal_hedge`, which
+  `run_pair` genuinely honours — it was once inert (validated, written to the run manifest,
+  and ignored), so `test_study.py::test_signal_hedge_setting_changes_the_spread` now guards
+  it. Worth knowing: notebook 04 §5 finds the rolling-vs-static choice moves the
+  cross-sectional mean by ~1pp while moving *individual pairs* by up to 48pp, which is a
+  noise signature rather than an edge.
 - **Sizing hedge ratio** (static, full in-sample OLS): used to size the actual leg-level
   trade in the engine. Stability is critical — a noisy rolling estimate whose range crosses
   zero can flip the hedge sign, turning a market-neutral position into a large directional

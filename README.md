@@ -26,14 +26,21 @@ costs:
 
 The answer is not "pairs trading works" or "pairs trading fails". It is that **the
 dispersion across similar pairs dwarfs the average effect**, so any small-universe study
-reports whichever conclusion its pair selection produces. Three independent lines converge
+reports whichever conclusion its pair selection produces. Four independent lines converge
 on that:
 
+- **The premise** — only **1 of 10** pairs is cointegrated in *both* the in-sample and
+  out-of-sample windows. The statistical property the method assumes does not persist.
 - **Pair selection** — the first three pairs chosen went 0 for 3; the last four went 3 for 4.
 - **Parameter choice** — 9 of 10 pairs change sign across an ordinary grid of lookback
   windows, and the pre-registered window is the *only* one of six with a positive
   cross-sectional mean.
 - **The cross-section** — a mean of +0.6% inside a 26pp standard deviation.
+
+A useful corrective on costs: the per-pair breakeven cost is **bimodal**. Four pairs lose
+money at *zero* cost and four clear the 6 bps charge by 4–16x, so for 8 of 10 pairs the cost
+assumption barely affects the verdict. Most losing pairs have no gross edge, rather than an
+edge eaten by friction.
 
 At an earlier six-pair stage this project reported a confident negative result. Four more
 pairs, chosen the same way and run through identical code, moved the mean from clearly
@@ -41,7 +48,8 @@ negative to indistinguishable from zero. Nothing was wrong with the machinery �
 conclusion was simply never as stable as the tables made it look.
 
 Full argument: [`notebooks/05_writeup.ipynb`](notebooks/05_writeup.ipynb).
-Tables and figures: [`notebooks/04_backtest_results.ipynb`](notebooks/04_backtest_results.ipynb).
+Tables and figures: [`notebooks/03_backtest_results.ipynb`](notebooks/03_backtest_results.ipynb).
+Robustness checks: [`notebooks/04_sensitivity_analysis.ipynb`](notebooks/04_sensitivity_analysis.ipynb).
 
 ## Run it
 
@@ -77,10 +85,13 @@ src/pairs_teardown/
   plotting/     spread, equity, drawdown figures
   study.py      the chain assembled: run a pair end-to-end, tabulate
   config.py     load + validate configs/pairs.yaml
+
+notebooks/
+  01 data  ->  02 cointegration  ->  03 results  ->  04 sensitivity  ->  05 writeup
 ```
 
 All logic lives in tested, importable modules. Notebooks import and call; they contain no
-strategy code. 83 tests, all on synthetic data with known answers — the suite never touches
+strategy code. 85 tests, all on synthetic data with known answers — the suite never touches
 the network.
 
 ## The five rules, and where they are enforced

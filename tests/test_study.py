@@ -12,6 +12,8 @@ All data is synthetic with a known hedge ratio; nothing here touches the network
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -127,6 +129,42 @@ def test_sizing_hedge_is_constant_across_the_whole_run(cfg):
     run = run_pair(cfg.pairs[0], make_prices(), cfg)
     assert isinstance(run.sizing_hedge_ratio, float)
     assert np.isfinite(run.sizing_hedge_ratio)
+
+
+# --------------------------------------------------------------------------- #
+# signal_hedge actually drives behaviour
+# --------------------------------------------------------------------------- #
+def test_signal_hedge_setting_changes_the_spread(cfg):
+    """
+    `signal_hedge` is recorded in run_manifest.json as a description of what was
+    run. It was once inert -- validated, written to the manifest, and ignored by
+    run_pair, which hardcoded the rolling spread. A config option the manifest
+    advertises but the code does not honour is a false record of the run.
+    """
+    rolling = run_pair(cfg.pairs[0], make_prices(), cfg)
+    static_cfg = dataclasses.replace(
+        cfg, signal=dataclasses.replace(cfg.signal, signal_hedge="static")
+    )
+    static = run_pair(cfg.pairs[0], make_prices(), static_cfg)
+
+    assert not rolling.spread.equals(static.spread)
+
+
+def test_static_signal_hedge_uses_the_in_sample_ratio(cfg):
+    """
+    The static signal branch must reuse the in-sample-only sizing ratio, not
+    re-fit on the whole sample -- otherwise switching to it would introduce the
+    very leak the rest of this module guards against.
+    """
+    static_cfg = dataclasses.replace(
+        cfg, signal=dataclasses.replace(cfg.signal, signal_hedge="static")
+    )
+    baseline = run_pair(cfg.pairs[0], make_prices(), static_cfg)
+    shocked = run_pair(cfg.pairs[0], make_prices(oos_shock=1.5), static_cfg)
+
+    assert shocked.metrics["in_sample"]["net"] == pytest.approx(
+        baseline.metrics["in_sample"]["net"]
+    )
 
 
 # --------------------------------------------------------------------------- #

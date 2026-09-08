@@ -31,6 +31,7 @@ from pairs_teardown.data.clean import align_prices, handle_missing
 from pairs_teardown.metrics.performance import summary
 from pairs_teardown.signals.rules import target_positions
 from pairs_teardown.signals.spread import build_rolling_spread, rolling_zscore
+from pairs_teardown.stats.cointegration import build_spread
 from pairs_teardown.stats.cointegration import estimate_hedge_ratio
 
 __all__ = ["PairRun", "PERIODS", "run_pair", "run_study", "slice_result", "to_frame"]
@@ -119,10 +120,19 @@ def run_pair(pair: Pair, prices_raw: pd.DataFrame, cfg: Config) -> PairRun:
     g_static = estimate_hedge_ratio(log_a[is_mask], log_b[is_mask])
     sizing_hedge = pd.Series(g_static, index=px.index)
 
-    # --- SIGNAL: rolling hedge -> spread -> z-score -> positions ------------
-    # Rolling is ADF-justified (static-hedge spreads fail stationarity for
-    # several pairs). It must never be used for sizing.
-    spread = build_rolling_spread(log_a, log_b, cfg.signal.window)
+    # --- SIGNAL: hedge -> spread -> z-score -> positions --------------------
+    # Rolling is the configured default and is ADF-justified (static-hedge
+    # spreads fail stationarity for several pairs). A rolling hedge must never
+    # be used for SIZING, which is why the two are separate settings.
+    #
+    # The static branch reuses the in-sample-only ratio fitted above rather than
+    # re-fitting on everything: a "static signal" that peeked at the full sample
+    # would leak, and the sensitivity analysis comparing the two branches would
+    # then be comparing a clean estimator against a cheating one.
+    if cfg.signal.signal_hedge == "rolling":
+        spread = build_rolling_spread(log_a, log_b, cfg.signal.window)
+    else:
+        spread = build_spread(log_a, log_b, g_static)
     z = rolling_zscore(spread, cfg.signal.window)
     positions = target_positions(
         z,
