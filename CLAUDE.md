@@ -164,6 +164,7 @@ make run-official   # only the three pre-specified pairs
 make test           # pytest -q
 make lint           # ruff check src tests scripts
 make typecheck      # mypy src
+make notebooks      # execute every notebook to check it still runs
 make clean          # wipe reports/ (keeps the cached prices)
 make clean-data     # also wipe data/raw/*.parquet -- forces a re-download
 ```
@@ -185,6 +186,15 @@ For a single test, bypass make: `uv run pytest tests/test_engine.py -k look_ahea
   whose names start with `__`, which is exactly what setuptools names its editable install file
   (`__editable__.pairs_teardown-0.1.0.pth`). Hatchling names it `_editable_impl_*` (single
   underscore), which Python processes normally. Do not switch back to setuptools.
+- **A uv venv has no `pip`.** So VS Code's "Install ipykernel" prompt — which shells out to
+  `python -m pip install ipykernel` in the selected interpreter — can never succeed here,
+  and the error it shows does not explain why. Anything a notebook kernel needs must be
+  declared in `pyproject.toml`'s dev extras and installed with `uv sync --extra dev`.
+  `ipykernel` and `nbconvert` are already there for exactly this reason; add new notebook
+  dependencies the same way rather than reaching for pip.
+- `make notebooks` executes every notebook and discards the result. It is the cheap check
+  that a change to the package did not silently break a notebook — the outputs are thrown
+  away so nothing lands in git.
 - The editable install persists across sessions once the venv exists — no need to reinstall.
 
 ## Architecture (per PROJECT_PLAN.md)

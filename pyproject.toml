@@ -13,7 +13,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "pre-commit>=3.7", "pandas-stubs>=2.0", "types-PyYAML>=6.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "pandas-stubs>=2.0",
+    "types-PyYAML>=6.0",
+    # Notebook execution. ipykernel must be declared here rather than installed on
+    # demand: a uv-created venv has no `pip`, so VS Code's "Install ipykernel"
+    # prompt has nothing to shell out to and always fails.
+    "ipykernel>=6.29",
+    "nbconvert>=7.16",
+]
 
 [build-system]
 requires = ["hatchling"]

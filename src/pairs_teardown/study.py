@@ -2,11 +2,7 @@
 Study orchestration: run a configured pair end-to-end and tabulate the result.
 
 This module holds the logic that ties the pipeline together — the chain from raw
-prices to a metrics row. It lives in the package rather than in
-``scripts/run_backtest.py`` for two reasons: notebooks import it instead of
-reimplementing the chain inline (which is how ``03_backtest_explore.ipynb``
-ended up with a full-sample hedge fit), and the in-sample-only discipline below
-is covered by tests rather than by a docstring alone.
+prices to a metrics row. 
 
 ``scripts/run_backtest.py`` is a thin CLI and file-writing wrapper around this.
 

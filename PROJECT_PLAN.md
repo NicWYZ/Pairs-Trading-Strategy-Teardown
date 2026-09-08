@@ -236,7 +236,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "pre-commit>=3.7"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "pre-commit>=3.7",
+       "pandas-stubs>=2.0", "types-PyYAML>=6.0",
+       # a uv venv has no pip, so VS Code cannot install these on demand
+       "ipykernel>=6.29", "nbconvert>=7.16"]
 
 [build-system]
 requires = ["hatchling"]
