@@ -21,6 +21,7 @@ from pairs_teardown.stats.cointegration import (
 
 N = 500
 
+
 @pytest.fixture
 def cointegrated_pair() -> tuple[pd.Series, pd.Series]:
     """
@@ -42,9 +43,11 @@ def independent_pair() -> tuple[pd.Series, pd.Series]:
     b = pd.Series(np.cumsum(rng.normal(0, 1, N)) + 100.0)
     return a, b
 
+
 def test_hedge_ratio_recovers_known_slope(cointegrated_pair):
-    a,b = cointegrated_pair
-    assert abs(estimate_hedge_ratio(a,b) - 2.0) < 0.1
+    a, b = cointegrated_pair
+    assert abs(estimate_hedge_ratio(a, b) - 2.0) < 0.1
+
 
 def test_cointegrated_pair_has_low_eg_pvalue(cointegrated_pair):
     a, b = cointegrated_pair
@@ -62,11 +65,13 @@ def test_independent_pair_has_high_eg_pvalue(independent_pair):
     a, b = independent_pair
     assert engle_granger_pvalue(a, b) > 0.10
 
+
 def test_independent_pair_spread_is_nonstationary(independent_pair):
     a, b = independent_pair
     hr = estimate_hedge_ratio(a, b)
     spread = build_spread(a, b, hr)
     assert adf_pvalue(spread) > 0.10
+
 
 def test_build_spread_matches_formula():
     a = pd.Series([10.0, 20.0, 30.0])
@@ -75,7 +80,8 @@ def test_build_spread_matches_formula():
     expected = pd.Series([8.0, 16.0, 24.0])
     pd.testing.assert_series_equal(spread, expected)
 
+
 def test_adf_pvalue_low_for_stationary_series():
     rng = np.random.default_rng(0)
-    white_noise = pd.Series(rng.normal(0,1,N))
+    white_noise = pd.Series(rng.normal(0, 1, N))
     assert adf_pvalue(white_noise) < 0.05

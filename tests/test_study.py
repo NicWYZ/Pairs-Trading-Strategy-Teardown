@@ -53,8 +53,8 @@ def cfg() -> Config:
         backtest=BacktestConfig(periods_per_year=252),
         output=OutputConfig(results_dir="reports/results", figures_dir="reports/figures"),
         pairs=(
-            Pair(name="A/B", a="A", b="B", rationale="synthetic", group="official"),
-            Pair(name="C/D", a="C", b="D", rationale="synthetic", group="sanity_check"),
+            Pair(name="A/B", a="A", b="B", rationale="synthetic"),
+            Pair(name="C/D", a="C", b="D", rationale="synthetic"),
         ),
     )
 
@@ -168,21 +168,23 @@ def test_to_frame_is_long_form_with_one_row_per_cell(cfg):
     assert set(table["basis"]) == {"gross", "net"}
 
 
-def test_to_frame_carries_the_group_label(cfg):
+def test_run_study_covers_every_configured_pair(cfg):
     """
-    The official/sanity_check label must survive into the table, so a
-    later-added pair can never be tabulated as if it were pre-specified.
+    No pair may be silently omitted. There is deliberately no subset argument —
+    dropping a pair after seeing its result is the failure mode this guards.
+    """
+    runs = run_study(make_prices(), cfg)
+    assert [r.pair.name for r in runs] == [p.name for p in cfg.pairs]
+
+
+def test_table_has_no_tier_column(cfg):
+    """
+    The study has one flat universe. A column that could rank pairs into
+    first- and second-class is the thing being kept out.
     """
     table = to_frame(run_study(make_prices(), cfg))
-    assert dict(table.groupby("pair")["group"].first()) == {
-        "A/B": "official",
-        "C/D": "sanity_check",
-    }
-
-
-def test_official_only_filters_pairs(cfg):
-    runs = run_study(make_prices(), cfg, official_only=True)
-    assert [r.pair.name for r in runs] == ["A/B"]
+    assert "group" not in table.columns
+    assert set(table["pair"]) == {"A/B", "C/D"}
 
 
 def test_hedge_ratio_column_matches_the_run(cfg):

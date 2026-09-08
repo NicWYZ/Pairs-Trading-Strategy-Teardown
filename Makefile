@@ -12,7 +12,7 @@ METRICS := reports/results/metrics.csv
 SRC     := $(shell find src/pairs_teardown -name '*.py')
 PRICES  := $(shell $(PYTHON) scripts/cache_path.py --config $(CONFIG))
 
-.PHONY: help install test lint typecheck run run-official notebooks clean clean-data
+.PHONY: help install test lint typecheck run notebooks clean clean-data
 
 help:
 	@echo "install       editable install with dev extras"
@@ -20,7 +20,6 @@ help:
 	@echo "lint          ruff check"
 	@echo "typecheck     mypy"
 	@echo "run           full study (all pairs) -> reports/"
-	@echo "run-official  only the three pre-specified pairs"
 	@echo "notebooks     execute every notebook to check it still runs"
 	@echo "clean         remove generated reports (keeps cached data)"
 	@echo "clean-data    also remove the cached price data"
@@ -53,9 +52,6 @@ $(METRICS): $(PRICES) $(CONFIG) $(SRC) scripts/run_backtest.py
 	$(PYTHON) scripts/run_backtest.py --config $(CONFIG)
 
 run: $(METRICS)
-
-run-official:
-	$(PYTHON) scripts/run_backtest.py --config $(CONFIG) --official-only
 
 # Execute every notebook and throw the result away: this checks they still run
 # top-to-bottom without writing outputs back into the .ipynb files, which would

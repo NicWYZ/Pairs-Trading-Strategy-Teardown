@@ -29,15 +29,11 @@ BASE = {
     "costs": {"commission_bps": 1.0, "slippage_bps": 5.0},
     "backtest": {"periods_per_year": 252},
     "output": {"results_dir": "reports/results", "figures_dir": "reports/figures"},
-    "pairs": {
-        "official": [
-            {"name": "WM/RSG", "a": "WM", "b": "RSG", "rationale": "duopoly"},
-            {"name": "FOXA/FOX", "a": "FOXA", "b": "FOX", "rationale": "share classes"},
-        ],
-        "sanity_check": [
-            {"name": "KO/PEP", "a": "KO", "b": "PEP", "rationale": "beverages"},
-        ],
-    },
+    "pairs": [
+        {"name": "WM/RSG", "a": "WM", "b": "RSG", "rationale": "duopoly"},
+        {"name": "FOXA/FOX", "a": "FOXA", "b": "FOX", "rationale": "share classes"},
+        {"name": "KO/PEP", "a": "KO", "b": "PEP", "rationale": "beverages"},
+    ],
 }
 
 
@@ -62,11 +58,24 @@ def test_loads_values(tmp_path):
     assert cfg.backtest.periods_per_year == 252
 
 
-def test_pair_groups_separated(tmp_path):
+def test_pairs_load_as_one_flat_list(tmp_path):
+    """
+    There is exactly one tier of pair. If a `group`-style field ever comes back,
+    this is the test that should have to be edited to allow it.
+    """
     cfg = load_config(write(tmp_path))
-    assert [p.name for p in cfg.official_pairs] == ["WM/RSG", "FOXA/FOX"]
-    assert [p.name for p in cfg.sanity_pairs] == ["KO/PEP"]
-    assert len(cfg.pairs) == 3
+    assert [p.name for p in cfg.pairs] == ["WM/RSG", "FOXA/FOX", "KO/PEP"]
+    assert not hasattr(cfg.pairs[0], "group")
+
+
+def test_rationale_is_required(tmp_path):
+    """A pair with no stated economic reason is not admissible."""
+
+    def m(c):
+        del c["pairs"][0]["rationale"]
+
+    with pytest.raises(ValueError, match="missing required key"):
+        load_config(write(tmp_path, m))
 
 
 def test_tickers_deduplicated_and_ordered(tmp_path):
@@ -159,7 +168,7 @@ def test_negative_costs_rejected(tmp_path):
 
 def test_duplicate_pair_names_rejected(tmp_path):
     def m(c):
-        c["pairs"]["official"][1]["name"] = "WM/RSG"
+        c["pairs"][1]["name"] = "WM/RSG"
 
     with pytest.raises(ValueError, match="duplicate"):
         load_config(write(tmp_path, m))
@@ -167,7 +176,7 @@ def test_duplicate_pair_names_rejected(tmp_path):
 
 def test_identical_legs_rejected(tmp_path):
     def m(c):
-        c["pairs"]["official"][0]["b"] = "WM"
+        c["pairs"][0]["b"] = "WM"
 
     with pytest.raises(ValueError, match="identical legs"):
         load_config(write(tmp_path, m))
@@ -175,7 +184,7 @@ def test_identical_legs_rejected(tmp_path):
 
 def test_missing_required_pair_key_rejected(tmp_path):
     def m(c):
-        del c["pairs"]["official"][0]["b"]
+        del c["pairs"][0]["b"]
 
     with pytest.raises(ValueError, match="missing required key"):
         load_config(write(tmp_path, m))

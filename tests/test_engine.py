@@ -82,6 +82,7 @@ def test_correct_hedge_sign_neutralizes_common_move_wrong_sign_does_not():
 
 # --- hedge ratio validation (threshold calibrated to real evidence) ---
 
+
 def test_validate_rejects_high_variance_hedge_ratio():
     noisy = pd.Series([0.5, 1.5, 0.2, 1.8, 0.1, 2.0, 0.3])  # std ~0.82
     price_a = pd.Series([100.0] * 7)

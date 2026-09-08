@@ -25,7 +25,7 @@ Conventions used throughout (and why):
   about direction when the value is tabulated next to returns.
 """
 
-from __future__ import annotations # type: ignore
+from __future__ import annotations  # type: ignore
 
 import numpy as np
 import pandas as pd
@@ -67,6 +67,7 @@ def sharpe_ratio(
         return float("nan")
     return float(excess.mean() / sd * np.sqrt(periods_per_year))
 
+
 def max_drawdown(equity_curve: pd.Series) -> float:
     """
     Maximum peak-to-trough drawdown of an equity curve, as a signed fraction.
@@ -83,6 +84,7 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     running_max = eq.cummax()
     drawdown = eq / running_max - 1.0
     return float(drawdown.min())
+
 
 def turnover(positions: pd.Series, periods_per_year: int = 252) -> float:
     """
@@ -103,6 +105,7 @@ def turnover(positions: pd.Series, periods_per_year: int = 252) -> float:
     if len(pos) < 2:
         return float("nan")
     return float(pos.diff().abs().dropna().mean() * periods_per_year)
+
 
 def _perf_block(
     returns: pd.Series,
@@ -157,6 +160,7 @@ def _perf_block(
         "n_periods": n,
     }
 
+
 def summary(
     result,
     periods_per_year: int = 252,
@@ -178,9 +182,7 @@ def summary(
     out-of-sample slices for the IS/OOS comparison.
     """
     return {
-        "net": _perf_block(
-            result.returns, result.held_positions, periods_per_year, risk_free_rate
-        ),
+        "net": _perf_block(result.returns, result.held_positions, periods_per_year, risk_free_rate),
         "gross": _perf_block(
             result.gross_returns, result.held_positions, periods_per_year, risk_free_rate
         ),

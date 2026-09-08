@@ -18,9 +18,7 @@ from pairs_teardown.config import load_config
 
 def cache_path(config_path: str) -> Path:
     cfg = load_config(config_path)
-    key = "_".join(sorted(cfg.tickers)) + f"_{cfg.data.start}_{cfg.data.end}".replace(
-        "-", ""
-    )
+    key = "_".join(sorted(cfg.tickers)) + f"_{cfg.data.start}_{cfg.data.end}".replace("-", "")
     return Path(cfg.data.cache_dir) / f"{key}.parquet"
 
 

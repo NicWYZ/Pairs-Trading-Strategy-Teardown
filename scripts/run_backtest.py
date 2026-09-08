@@ -6,7 +6,7 @@ This is the one-command reproduction entry point: everything the study claims
 should be regenerable by `make run` from the config alone.
 
 The pipeline logic lives in ``pairs_teardown.study`` — including the
-in-sample-only sizing hedge fit. This script is only argument parsing, 
+in-sample-only sizing hedge fit. This script is only argument parsing,
 file writing, and a summary print.
 """
 
@@ -17,6 +17,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from pairs_teardown.config import Config, load_config
@@ -70,34 +71,30 @@ def write_outputs(runs: list[PairRun], table: pd.DataFrame, cfg: Config) -> None
         )
         fig.savefig(figures_dir / f"{slug}_spread_zscore.png", dpi=150)
 
-        fig = plot_equity_curve(
-            res.equity_curve, gross_equity, title=f"{r.pair.name} equity"
-        )
+        fig = plot_equity_curve(res.equity_curve, gross_equity, title=f"{r.pair.name} equity")
         fig.savefig(figures_dir / f"{slug}_equity.png", dpi=150)
 
         fig = plot_drawdown(res.equity_curve, title=f"{r.pair.name} drawdown")
         fig.savefig(figures_dir / f"{slug}_drawdown.png", dpi=150)
 
+        # charts.py returns figures and never closes them, by design. With 10
+        # pairs that is 30 live figures; close them here or matplotlib warns and
+        # holds the memory for the whole run.
+        plt.close("all")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", default="configs/pairs.yaml")
-    ap.add_argument(
-        "--official-only",
-        action="store_true",
-        help="run only the three pre-specified pairs",
-    )
     args = ap.parse_args()
 
     cfg = load_config(args.config)
 
-    # Always request the full ticker list so the loader's cache key stays
-    # stable; --official-only filters which pairs are RUN, not what is cached.
     prices_raw = load_or_download(
         list(cfg.tickers), cfg.data.start, cfg.data.end, cfg.data.cache_dir
     )
 
-    runs = run_study(prices_raw, cfg, official_only=args.official_only)
+    runs = run_study(prices_raw, cfg)
     table = to_frame(runs)
     write_outputs(runs, table, cfg)
 

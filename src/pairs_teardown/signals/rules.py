@@ -5,9 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 
-def target_positions(
-    zscore: pd.Series, entry_threshold: float, exit_threshold: float
-) -> pd.Series:
+def target_positions(zscore: pd.Series, entry_threshold: float, exit_threshold: float) -> pd.Series:
     """
     Map z-score to a target spread position in {-1, 0, +1} with hysteresis.
 

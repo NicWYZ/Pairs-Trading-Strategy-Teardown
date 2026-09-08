@@ -66,39 +66,65 @@ backtest:
   periods_per_year: 252
 
 # ---------------------------------------------------------------------------
-# Pairs. `official` were pre-specified from economic reasoning BEFORE any
-# backtesting. `sanity_check` were added later as additional evidence; they are
-# reported separately and labelled, so adding them cannot be mistaken for (or
-# become) a search over tickers.
+# Pairs. Every pair here was specified from economic reasoning BEFORE its
+# backtest was run, and every one is reported, whatever it did. There is no
+# second tier: a pair that disappointed cannot be quietly demoted, and a pair
+# that did well cannot be promoted, because the file admits only one category.
+#
+# The universe was assembled in three waves (05_writeup.ipynb §2.3 gives the
+# chronology, which is a fact about this study that the reader is entitled to):
+#   wave 1 — WM/RSG, FOXA/FOX, SPY/VOO
+#   wave 2 — KO/PEP, MA/V, XOM/CVX
+#   wave 3 — HD/LOW, UPS/FDX, UNP/CSX, DUK/SO
+# Each wave was fixed before it was run. Waves 2 and 3 were chosen while wave 1's
+# results were known, so the honest claim is "pre-specified per wave", not "the
+# whole universe was pre-registered in 2015". Nothing was ever dropped.
+#
+# ADDING A PAIR: write it here with its economic rationale, run it once, and
+# report it. Removing one after seeing its result is the one thing that would
+# invalidate the study.
 # ---------------------------------------------------------------------------
 pairs:
-  official:
-    - name: "WM/RSG"
-      a: "WM"
-      b: "RSG"
-      rationale: "Economic duopoly in North American waste collection."
-    - name: "FOXA/FOX"
-      a: "FOXA"
-      b: "FOX"
-      rationale: "Two share classes of the same company; near-mechanical linkage."
-    - name: "SPY/VOO"
-      a: "SPY"
-      b: "VOO"
-      rationale: "Near-degenerate control: same index, different wrapper."
-
-  sanity_check:
-    - name: "KO/PEP"
-      a: "KO"
-      b: "PEP"
-      rationale: "Beverage duopoly."
-    - name: "MA/V"
-      a: "MA"
-      b: "V"
-      rationale: "Card-network duopoly."
-    - name: "XOM/CVX"
-      a: "XOM"
-      b: "CVX"
-      rationale: "Integrated oil majors, common commodity factor."
+  - name: "WM/RSG"
+    a: "WM"
+    b: "RSG"
+    rationale: "Economic duopoly in North American waste collection."
+  - name: "FOXA/FOX"
+    a: "FOXA"
+    b: "FOX"
+    rationale: "Two share classes of the same company; near-mechanical linkage."
+  - name: "SPY/VOO"
+    a: "SPY"
+    b: "VOO"
+    rationale: "Near-degenerate control: same index, different wrapper."
+  - name: "KO/PEP"
+    a: "KO"
+    b: "PEP"
+    rationale: "Beverage duopoly; shared input costs and shelf competition."
+  - name: "MA/V"
+    a: "MA"
+    b: "V"
+    rationale: "Card-network duopoly; near-identical toll-booth economics."
+  - name: "XOM/CVX"
+    a: "XOM"
+    b: "CVX"
+    rationale: "Integrated oil majors; common crude and refining-margin factor."
+  - name: "HD/LOW"
+    a: "HD"
+    b: "LOW"
+    rationale: "Home-improvement big-box duopoly; common housing-cycle demand."
+  - name: "UPS/FDX"
+    a: "UPS"
+    b: "FDX"
+    rationale: "Parcel logistics duopoly; shared e-commerce volume and fuel costs."
+  - name: "UNP/CSX"
+    a: "UNP"
+    b: "CSX"
+    rationale: "Class I railroads; shared freight cycle and regulated network economics."
+  - name: "DUK/SO"
+    a: "DUK"
+    b: "SO"
+    rationale: "Rate-regulated Southeast electric utilities; common rate-base and rate-sensitivity."
 
 output:
   results_dir: "reports/results"

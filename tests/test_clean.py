@@ -6,6 +6,7 @@ import pytest
 
 from pairs_teardown.data.clean import align_prices, handle_missing, to_log_prices
 
+
 @pytest.fixture
 def prices_with_gap() -> pd.DataFrame:
     """5-day panel: ticker A has one NaN on day 3, ticker B is clean."""
@@ -18,17 +19,19 @@ def prices_with_gap() -> pd.DataFrame:
         index=dates,
     )
 
+
 @pytest.fixture
 def clean_prices() -> pd.DataFrame:
     """5-day panel with no missing values."""
     dates = pd.date_range("2020-01-01", periods=5, freq="B")
     return pd.DataFrame(
-        {"A": [100.0, 101.0, 102.0, 103.0, 104.0],
-         "B": [50.0, 51.0, 52.0, 53.0, 54.0]},
+        {"A": [100.0, 101.0, 102.0, 103.0, 104.0], "B": [50.0, 51.0, 52.0, 53.0, 54.0]},
         index=dates,
     )
 
+
 # --- align_prices ---
+
 
 def test_align_drops_rows_with_any_nan(prices_with_gap: pd.DataFrame) -> None:
     result = align_prices(prices_with_gap)
@@ -40,7 +43,9 @@ def test_align_preserves_fully_clean_data(clean_prices: pd.DataFrame) -> None:
     result = align_prices(clean_prices)
     assert len(result) == len(clean_prices)
 
+
 # --- handle_missing ---
+
 
 def test_handle_missing_fills_within_max_gap(prices_with_gap: pd.DataFrame) -> None:
     filled = handle_missing(prices_with_gap, max_gap=3)
@@ -67,8 +72,13 @@ def test_handle_before_align_salvages_small_gaps(prices_with_gap: pd.DataFrame) 
     result = align_prices(handle_missing(prices_with_gap, max_gap=3))
     assert len(result) == 5  # gap filled, so nothing dropped
 
+
 # --- to_log_prices ---
+
 
 def test_log_prices_match_numpy(clean_prices: pd.DataFrame) -> None:
     result = to_log_prices(clean_prices)
-    pd.testing.assert_frame_equal(result, pd.DataFrame(np.log(clean_prices), index = clean_prices.index, columns = clean_prices.columns))
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame(np.log(clean_prices), index=clean_prices.index, columns=clean_prices.columns),
+    )

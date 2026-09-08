@@ -41,7 +41,7 @@ def main() -> None:
     print("\n--- Per-pair summary after cleaning ---")
     for pair in cfg.pairs:
         px = load_pair(pair.a, pair.b, prices_raw)
-        print(f"\n{pair.name}  [{pair.group}]")
+        print(f"\n{pair.name}")
         print(f"  Trading days : {len(px)}")
         print(f"  Date range   : {px.index[0].date()} -> {px.index[-1].date()}")
         print(f"  Missing      : {px.isna().sum().to_dict()}")

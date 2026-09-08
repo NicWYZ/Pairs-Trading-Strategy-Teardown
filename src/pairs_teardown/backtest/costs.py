@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class CostModel:
     """
@@ -17,6 +18,7 @@ class CostModel:
     These are the dials the teardown turns: re-running under optimistic vs.
     pessimistic costs is how you show whether an edge is real or illusory.
     """
+
     commission_bps: float = 1.0
     slippage_bps: float = 5.0
 
@@ -26,7 +28,6 @@ class CostModel:
         Total cost as a fraction of traded notional (per side).
         """
         return (self.commission_bps + self.slippage_bps) / 1e4
-    
+
     def cost(self, traded_notional):
         return self.rate * traded_notional
-    

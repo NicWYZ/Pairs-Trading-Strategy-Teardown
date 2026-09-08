@@ -1,0 +1,37 @@
+# Pre-commit hooks. Install once with `uv run pre-commit install`.
+#
+# These run on every commit and are intentionally fast: linting, formatting, and
+# notebook-output stripping. The slow checks (pytest, mypy) belong in CI, not in
+# the commit path — a commit hook that takes 30 seconds gets bypassed with
+# `--no-verify`, and a hook that is routinely bypassed enforces nothing.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  # Strip notebook outputs before they reach git. Without this every re-run of a
+  # notebook produces a huge diff of base64 PNGs and changed execution counts,
+  # which buries the actual prose and code changes. The study's numbers live in
+  # reports/results/metrics.csv, not in committed cell outputs.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      # Market data must never enter git — it is large, redistributable only
+      # under yfinance's terms, and re-downloadable from the committed config.
+      - id: check-added-large-files
+        args: [--maxkb=512]

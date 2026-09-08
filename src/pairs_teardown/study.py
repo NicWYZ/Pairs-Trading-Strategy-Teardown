@@ -2,7 +2,7 @@
 Study orchestration: run a configured pair end-to-end and tabulate the result.
 
 This module holds the logic that ties the pipeline together — the chain from raw
-prices to a metrics row. 
+prices to a metrics row.
 
 ``scripts/run_backtest.py`` is a thin CLI and file-writing wrapper around this.
 
@@ -163,10 +163,15 @@ def run_pair(pair: Pair, prices_raw: pd.DataFrame, cfg: Config) -> PairRun:
     )
 
 
-def run_study(prices_raw: pd.DataFrame, cfg: Config, official_only: bool = False) -> list[PairRun]:
-    """Run every configured pair (or only the pre-specified ones)."""
-    pairs = cfg.official_pairs if official_only else cfg.pairs
-    return [run_pair(p, prices_raw, cfg) for p in pairs]
+def run_study(prices_raw: pd.DataFrame, cfg: Config) -> list[PairRun]:
+    """
+    Run every configured pair.
+
+    There is no way to run a subset. Every pair in the config is specified before
+    it is run and reported whatever it does, so an API that could quietly omit
+    one would be a way to launder a bad result out of the study.
+    """
+    return [run_pair(p, prices_raw, cfg) for p in cfg.pairs]
 
 
 def to_frame(runs: list[PairRun]) -> pd.DataFrame:
@@ -184,7 +189,6 @@ def to_frame(runs: list[PairRun]) -> pd.DataFrame:
                 rows.append(
                     {
                         "pair": r.pair.name,
-                        "group": r.pair.group,
                         "period": period,
                         "basis": basis,
                         "hedge_ratio": r.sizing_hedge_ratio,

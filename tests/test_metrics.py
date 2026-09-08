@@ -36,9 +36,7 @@ def test_sharpe_closed_form_unannualized():
 def test_sharpe_annualization_factor():
     # Same series; annualizing by 252 multiplies the raw ratio by sqrt(252).
     r = pd.Series([0.01, 0.03])
-    assert sharpe_ratio(r, periods_per_year=252) == pytest.approx(
-        math.sqrt(2) * math.sqrt(252)
-    )
+    assert sharpe_ratio(r, periods_per_year=252) == pytest.approx(math.sqrt(2) * math.sqrt(252))
 
 
 def test_sharpe_zero_mean_is_zero():

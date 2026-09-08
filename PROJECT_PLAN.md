@@ -35,10 +35,10 @@ config-driven experiments, continuous integration — is exactly the difference 
 "analysis script" and "research code" that quantitative employers care about, and it
 transfers directly to any future research codebase.
 
-We study three pairs chosen to span the full spectrum of how two assets can be linked,
+We study **ten pairs** chosen to span the full spectrum of how two assets can be linked,
 because the *type* of link determines how strong and stable the relationship is, and
 contrasting the strategy's behavior across them is what lifts this above a single-pair
-demo:
+demo. Three of them define the range:
 
 - **WM / RSG** (Waste Management / Republic Services) — an economic duopoly. The two
   firms face nearly identical demand, costs, and regulation, so any cointegration is
@@ -51,10 +51,30 @@ demo:
   is essentially zero. The punchline: even a near-perfect statistical relationship yields
   nothing tradeable after costs.
 
-A note on research integrity that should appear in the final writeup: these three pairs
-are **pre-specified from economic reasoning**, not selected by scanning thousands of
-combinations for whichever backtested best. That design choice sidesteps data-snooping
-bias, and stating it explicitly is a point of rigor most projects omit.
+The remaining seven are ordinary economic links across different sectors — KO/PEP and
+MA/V (duopolies), XOM/CVX (common commodity factor), HD/LOW (housing cycle), UPS/FDX
+(parcel volume), UNP/CSX (freight cycle) and DUK/SO (regulated utilities). They exist to
+give the study a cross-section: with three pairs you can only report three anecdotes, and
+the study's actual finding turned out to be about **dispersion across pairs**, which three
+cannot measure at all.
+
+A note on research integrity that must appear in the final writeup: every pair is
+**pre-specified from economic reasoning**, not selected by scanning thousands of
+combinations for whichever backtested best, and **every pair is reported whatever it did**.
+
+Two honest qualifications on that, both of which belong in the writeup rather than being
+smoothed over:
+
+1. The universe was assembled in three waves (see `configs/pairs.yaml`). Each wave was
+   fixed before it was run, but waves 2 and 3 were chosen by someone who already knew how
+   wave 1 had done. The claim is "pre-specified per wave", not "the whole universe was
+   pre-registered in one act".
+2. An earlier version of this project split the pairs into an `official` headline tier and
+   a `sanity_check` tier. **That was a mistake and has been removed.** Wave 1 went 0 for 3
+   out-of-sample while wave 3 went 3 for 4 — so the tiering would have let the same data,
+   the same code and the same parameters support opposite headlines depending only on which
+   pairs had been written down first. There is now no tier field anywhere in the schema,
+   and `test_study.py::test_table_has_no_tier_column` fails if one returns.
 
 ---
 
@@ -376,8 +396,8 @@ Packages: `pytest`, `pandas`, `numpy`, plus the package under test.
 
 ### Notebooks: `notebooks/` (thin — import from the package)
 
-- **`01_data_exploration.ipynb`** — download via the package, plot the three pairs' prices,
-  sanity-check ranges and gaps.
+- **`01_data_exploration.ipynb`** — download via the package, plot the pairs' prices,
+  check ranges and gaps.
 - **`02_cointegration_analysis.ipynb`** — for each pair: hedge ratio, Engle–Granger/ADF
   p-values, plot spread and z-score. Discuss which pairs are cointegrated and how stably.
 - **`03_backtest_explore.ipynb`** — exploratory work that predates the orchestration
@@ -388,8 +408,9 @@ Packages: `pytest`, `pandas`, `numpy`, plus the package under test.
 - **`04_backtest_results.ipynb`** — the authoritative results. Reads
   `reports/results/metrics.csv` and `run_manifest.json` (so it cannot disagree with what
   the pipeline computed), tabulates gross-vs-net and IS-vs-OOS for the pre-specified pairs,
-  reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the sanity-check
-  pairs separately, and regenerates equity/drawdown figures via `pairs_teardown.study`.
+  reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the cross-sectional
+  dispersion that is the study's actual finding, and regenerates equity/drawdown figures via
+  `pairs_teardown.study`.
 - **`05_writeup.ipynb`** — the narrative: methodology, results, and the honest conclusion,
   organized around the five principles in Section 3. States the survivorship and
   data-snooping positions explicitly, and includes the window-sensitivity sweep that shows
@@ -507,9 +528,9 @@ Work in stages. Each stage ends with something that runs and is tested before mo
     move the fitted sizing hedge ratio or any in-sample metric.
 20. Rename the old `03_backtest_results.ipynb` to `03_backtest_explore.ipynb` and label it
     superseded in its header, so its full-sample numbers can never be quoted as findings.
-21. `04_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for the three
-    pre-specified pairs, the cost-drag reconciliation, the sanity-check pairs in a separate
-    labelled table, and equity-curve and drawdown plots.
+21. `04_backtest_results.ipynb`: gross-vs-net and IS-vs-OOS tables for every pair, the
+    cost-drag reconciliation, the cross-sectional dispersion statistics, and equity-curve
+    and drawdown plots.
 22. `05_writeup.ipynb`: the honest narrative, organized around the five principles. State
     the survivorship and data-snooping positions explicitly. Let the results say what they
     say — a decay to zero after costs is the expected, valid result.
@@ -530,7 +551,7 @@ make install                           # uv sync --extra dev (never `uv pip inst
 make test                              # all tests pass
 make run                               # fetch prices if stale, then full study
                                        #   → reports/results + reports/figures
-make run-official                      # only the three pre-specified pairs
+make notebooks                         # execute every notebook to check it still runs
 # then open notebooks/04_backtest_results.ipynb for the tables,
 #      and notebooks/05_writeup.ipynb for the narrative
 ```
@@ -544,9 +565,9 @@ make run-official                      # only the three pre-specified pairs
 - [x] `make run` reproduces all metrics and figures from `configs/pairs.yaml` alone.
 - [x] Every result is reported **gross and net** and **in-sample and out-of-sample**.
 - [x] Hedge ratio and parameters are fit on in-sample data only.
-- [ ] No market data is committed to git; the download script + lockfile guarantee
+- [x] No market data is committed to git; the download script + lockfile guarantee
       reproducibility.
-- [ ] CI is green; pre-commit is installed.
+- [x] CI is green; pre-commit is installed.
 - [x] `05_writeup.ipynb` states the honest conclusion and explicitly addresses survivorship
       bias and data-snooping.
 

@@ -76,11 +76,19 @@ class OutputConfig:
 
 @dataclass(frozen=True)
 class Pair:
+    """
+    One pair to study.
+
+    There is deliberately no tier or category field. Every pair in the config was
+    specified from economic reasoning before it was run and is reported whatever
+    it did; a schema that cannot express "second-class pair" is what stops one
+    being invented after the fact.
+    """
+
     name: str
     a: str
     b: str
     rationale: str
-    group: str  # "official" or "sanity_check"
 
 
 @dataclass(frozen=True)
@@ -92,16 +100,6 @@ class Config:
     backtest: BacktestConfig
     output: OutputConfig
     pairs: tuple[Pair, ...]
-
-    @property
-    def official_pairs(self) -> tuple[Pair, ...]:
-        """The three pre-specified pairs — the study's actual claim."""
-        return tuple(p for p in self.pairs if p.group == "official")
-
-    @property
-    def sanity_pairs(self) -> tuple[Pair, ...]:
-        """Later-added pairs, reported separately and labelled as such."""
-        return tuple(p for p in self.pairs if p.group == "sanity_check")
 
     @property
     def tickers(self) -> tuple[str, ...]:
@@ -121,20 +119,19 @@ def _require(mapping: dict, key: str, where: str) -> object:
     return mapping[key]
 
 
-def _parse_pairs(raw: dict) -> tuple[Pair, ...]:
-    pairs: list[Pair] = []
-    for group in ("official", "sanity_check"):
-        for entry in raw.get(group, []) or []:
-            pairs.append(
-                Pair(
-                    name=str(_require(entry, "name", f"pairs.{group}")),
-                    a=str(_require(entry, "a", f"pairs.{group}")),
-                    b=str(_require(entry, "b", f"pairs.{group}")),
-                    rationale=str(entry.get("rationale", "")),
-                    group=group,
-                )
-            )
-    return tuple(pairs)
+def _parse_pairs(raw: list | None) -> tuple[Pair, ...]:
+    """Parse the flat `pairs:` list. A rationale is required, not optional."""
+    if not isinstance(raw, list):
+        raise ValueError("config: 'pairs' must be a list of pair entries")
+    return tuple(
+        Pair(
+            name=str(_require(entry, "name", "pairs")),
+            a=str(_require(entry, "a", "pairs")),
+            b=str(_require(entry, "b", "pairs")),
+            rationale=str(_require(entry, "rationale", "pairs")),
+        )
+        for entry in raw
+    )
 
 
 def _validate(cfg: Config) -> None:
@@ -153,13 +150,11 @@ def _validate(cfg: Config) -> None:
         raise ValueError(f"config: signal.exit must be >= 0, got {s.exit}")
     if s.signal_hedge not in {"rolling", "static"}:
         raise ValueError(
-            f"config: signal.signal_hedge must be 'rolling' or 'static', "
-            f"got {s.signal_hedge!r}"
+            f"config: signal.signal_hedge must be 'rolling' or 'static', got {s.signal_hedge!r}"
         )
     if s.sizing_hedge not in {"rolling", "static"}:
         raise ValueError(
-            f"config: signal.sizing_hedge must be 'rolling' or 'static', "
-            f"got {s.sizing_hedge!r}"
+            f"config: signal.sizing_hedge must be 'rolling' or 'static', got {s.sizing_hedge!r}"
         )
     if s.sizing_hedge == "rolling":
         # Not a style preference. A rolling sizing ratio that drifts toward zero
@@ -221,7 +216,7 @@ def load_config(path: str | Path) -> Config:
         costs=CostConfig(**raw["costs"]),
         backtest=BacktestConfig(**raw["backtest"]),
         output=OutputConfig(**raw["output"]),
-        pairs=_parse_pairs(raw.get("pairs", {})),
+        pairs=_parse_pairs(raw.get("pairs")),
     )
     _validate(cfg)
     return cfg

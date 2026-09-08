@@ -14,6 +14,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import pandas as pd
 
+
 def plot_spread_zscore(
     spread: pd.Series,
     zscore: pd.Series,
@@ -91,7 +92,7 @@ def plot_drawdown(equity_curve: pd.Series, title: str | None = None):
     Drawdown at each date is ``equity / running_max - 1`` (<= 0), shaded down
     from zero so the depth and duration of losing stretches are legible.
     """
-    
+
     eq = pd.Series(equity_curve).dropna()
     drawdown = eq / eq.cummax() - 1.0
 

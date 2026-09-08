@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+
 def rolling_hedge_ratio(a: pd.Series, b: pd.Series, window: int) -> pd.Series:
     """
     Causal rolling OLS slope over a trailing window.
@@ -25,6 +26,7 @@ def rolling_hedge_ratio(a: pd.Series, b: pd.Series, window: int) -> pd.Series:
     var = b.rolling(window).var()
     return cov / var
 
+
 def build_rolling_spread(a: pd.Series, b: pd.Series, window: int) -> pd.Series:
     """
     Spread A - hedge_t * B using the trailing rolling hedge ratio.
@@ -34,6 +36,7 @@ def build_rolling_spread(a: pd.Series, b: pd.Series, window: int) -> pd.Series:
     """
     hr = rolling_hedge_ratio(a, b, window)
     return a - hr * b
+
 
 def rolling_zscore(spread: pd.Series, window: int) -> pd.Series:
     """

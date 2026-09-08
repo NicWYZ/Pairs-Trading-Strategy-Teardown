@@ -4,8 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 7 (analysis & writeup) is complete.** The study runs end-to-end from the config,
-and the results and narrative notebooks are written. Completed so far:
+**All stages (0-8) are complete.** The study runs end-to-end from the config, the results
+and narrative notebooks are written, and pre-commit/CI/README/lockfile are in place.
+
+**The universe is 10 pairs and completely flat.** There is no `official` vs `sanity_check`
+distinction any more — see the note under "Critical design note: no pair tiers" below, which
+explains why it was removed and why re-introducing it would be a real methodological
+regression, not a stylistic choice. Completed so far:
 
 - `src/pairs_teardown/data/loaders.py` — `load_or_download` downloads adjusted-close prices
   via yfinance and caches to parquet in `data/raw/`. Cache key encodes tickers + date range;
@@ -52,28 +57,28 @@ and the results and narrative notebooks are written. Completed so far:
   the one misconfiguration that silently destroys market neutrality. `SplitConfig` owns
   `is_mask`/`oos_mask` so the IS/OOS boundary is defined in exactly one place.
 - `configs/pairs.yaml` — single source of truth for every parameter, and committed, so it
-  doubles as the record of what was run. Pairs are split into `official` (the three
-  pre-specified) and `sanity_check` (added later, reported separately and labelled) so
-  adding pairs can never be mistaken for a search over tickers.
+  doubles as the record of what was run. One flat list of 10 pairs, each with a required
+  `rationale`. Adding a pair means writing it here, running it once, and reporting it;
+  removing one after seeing its result is the single thing that would invalidate the study.
 - `src/pairs_teardown/study.py` — the pipeline chain: `run_pair`, `run_study`, `to_frame`.
   **It fits the static sizing hedge ratio on the in-sample window only**, then freezes it
   across the split; `03_backtest_explore.ipynb` fits on the full sample, which leaks. This
   lives in the package rather than in `scripts/` for two reasons: notebooks import the
   chain instead of reimplementing it (reimplementing it inline is exactly how notebook 03
-  acquired its leak), and the discipline is testable. `to_frame` carries the
-  official/sanity_check group label into every row, so a later-added pair cannot be
-  tabulated as if it had been pre-specified.
+  acquired its leak), and the discipline is testable. `run_study` has no subset argument
+  and `to_frame` emits no tier column — an API that could quietly omit a pair would be a way
+  to launder a bad result out of the study.
 - `scripts/run_backtest.py` — the reproduction entry point, now only argparse + file
   writing over `study.py`. Writes `reports/results/metrics.csv` (long-form: pair x period
   x gross/net), a `run_manifest.json` recording parameters + hedge ratios + timestamp, and
-  three figures per pair. `--official-only` filters which pairs are *run*, never which are
-  *cached*, so the loader's cache key stays stable.
+  three figures per pair, closing matplotlib figures as it goes (10 pairs x 3 = 30 live
+  figures otherwise).
 - `scripts/download_data.py` — now config-driven (`--config`) rather than hardcoding
   tickers; still prints per-pair summaries after cleaning.
 - `scripts/cache_path.py` — prints the loader's parquet cache path for a config, so the
   Makefile can express the pipeline's dependency graph without hardcoding a filename that
   would go stale.
-- `Makefile` — `install/test/lint/typecheck/run/run-official/clean/clean-data`. File targets
+- `Makefile` — `install/test/lint/typecheck/run/notebooks/clean/clean-data`. File targets
   encode the dependency graph, so `make run` re-runs only what is stale. Two non-obvious
   details, both load-bearing: `PYTHON := uv run python` (a bare `python` resolves to conda's
   and cannot import the package), and the download rule ends in `touch $@` (the loader
@@ -87,27 +92,60 @@ and the results and narrative notebooks are written. Completed so far:
   `run_manifest.json` (so it cannot disagree with the pipeline), tabulates gross-vs-net and
   IS-vs-OOS, reconciles the cost drag against `turnover x (1+|g|) x bps` (actual/predicted
   lands in 0.966-0.998, which is the evidence that the cost story is arithmetic and not an
-  unexplained residual), reports sanity-check pairs in a separate labelled table, and
-  regenerates figures through `study.run_study`.
-- `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles.
-  Its strongest section is the window-sensitivity sweep: varying *only* the z-score window
-  over {40,50,60,75,90,120}, the pre-registered 60 gives 0 of 3 official pairs profitable
-  OOS while 75 gives 2 of 3 (WM/RSG alone swings -18.2% to +9.5%). That is the
-  data-snooping argument made concrete, and it is reported as a finding about instability,
-  never used to pick a window.
+  unexplained residual), reports the cross-sectional dispersion statistics that are the
+  study's actual finding, and regenerates figures through `study.run_study`.
+- `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles. Its
+  §2.3 documents the removal of the pair tiers as a methodological error the study made and
+  corrected. Its §2.6 window sweep is the sharpest evidence: 9 of 10 pairs change sign
+  across {40,50,60,75,90,120}, and the pre-registered 60 is the *only* window of the six
+  with a positive cross-sectional mean — so the headline +0.6% is the best case, not the
+  central case. Reported as a finding about instability, never used to pick a window.
+- `.pre-commit-config.yaml` — ruff, ruff-format, nbstripout, plus whitespace/large-file
+  checks. Fast hooks only; pytest and mypy stay in CI, because a slow commit hook gets
+  bypassed and a bypassed hook enforces nothing. **nbstripout means committed notebooks
+  carry no outputs** — run them locally to see figures.
+- `.github/workflows/ci.yml` — uv sync, ruff check, ruff format --check, mypy, pytest. The
+  suite is fully synthetic, so CI needs no market data and no network.
+- `README.md` — the public-facing summary: the finding, how to run it, and where the five
+  rules are enforced.
 
-82 tests pass (`test_study.py` adds 13). `charts.py` and `scripts/` have no direct tests;
-the logic that used to sit in `scripts/run_backtest.py` is now covered via `study.py`.
-`make lint` and `make typecheck` are both clean (a `[tool.mypy]` section with
-`ignore_missing_imports` was added to `pyproject.toml`, per PROJECT_PLAN §6).
+83 tests pass. `charts.py` has no direct tests; the logic that used to sit in
+`scripts/run_backtest.py` is now covered via `study.py`. `make lint`, `make typecheck` and
+`ruff format --check` are all clean.
 
-Latest run (net total return %, IS vs OOS): every official pair is negative after costs —
-WM/RSG -8.8/-10.8, FOXA/FOX -5.6/-1.8, SPY/VOO -5.4/-3.3. That is the expected teardown
-finding, not a bug. The single profitable pair in the study is KO/PEP (+14.1% net OOS),
-which is a *sanity-check* pair, not a pre-specified one — that asymmetry is discussed in
-the writeup rather than smoothed over.
+**The headline finding changed when the universe grew from 6 to 10 pairs, and that change
+is itself the result.** At 6 pairs the study reported a clean negative: costs kill the
+edge. At 10 pairs, out-of-sample net: 4 of 10 profitable, range -42.4% (UPS/FDX) to +55.9%
+(UNP/CSX), cross-sectional mean +0.6% (t=0.08, p=0.94) inside a 26pp standard deviation.
+Costs still consume ~80% of the mean gross return but now flip the sign of only 2 pairs —
+most losers had no gross edge at all, a distinction the 6-pair universe hid. So the
+conclusion is about **variance, not mean**: dispersion across similar pairs dwarfs the
+average effect, and any small-universe study reports whatever its pair selection produces.
 
-Still to build: Stage 8 (pre-commit, CI, README, `uv lock`), plus tests for `plotting/`.
+**Do not "fix" this back into a clean negative result.** Reverting to a smaller or tiered
+universe would restore a tidier headline by discarding the evidence that the headline was
+never stable.
+
+Remaining gap: `plotting/charts.py` still has no tests.
+
+### Critical design note: no pair tiers
+
+The study once split its pairs into an `official` headline set and a `sanity_check` set.
+**That has been removed and must not come back.** The reason is empirical, not stylistic:
+the first three pairs chosen went 0 for 3 out-of-sample while the last four went 3 for 4, so
+the tiering would have let identical data, code and parameters support opposite headlines
+depending only on which pairs were written down first. It was a machine for confirming
+whichever conclusion the author reached for first.
+
+The rule is now enforced structurally rather than by memory:
+- `Pair` has no `group`/tier field and `load_config` cannot parse one.
+- `to_frame` emits no column that could rank pairs.
+- `run_study` has no subset argument, so no pair can be silently omitted from a run.
+- `test_study.py::test_table_has_no_tier_column` and
+  `test_config.py::test_pairs_load_as_one_flat_list` fail if any of that is undone.
+
+If a future task seems to need a tier ("just report the interesting ones", "split out the
+new pairs"), that is the failure mode these guards exist to catch. Report all pairs.
 
 ### Critical design note: signal hedge ratio vs. sizing hedge ratio
 
@@ -149,9 +187,10 @@ until the core pipeline exists.
 ## What this project is
 
 A pairs-trading **teardown**, not a strategy pitch. The goal is to honestly test whether
-classic pairs-trading edges (on WM/RSG, FOXA/FOX, SPY/VOO) survive realistic transaction
-costs and a strict in-sample/out-of-sample split. A post-cost decay in performance is the
-expected, correct result — treat it as a finding to report, not a bug to fix.
+classic pairs-trading edges survive realistic transaction costs and a strict
+in-sample/out-of-sample split, across 10 economically-linked US large-cap pairs. Whatever
+the results say is the finding — a post-cost decay, a null, or a wide dispersion are all
+valid outcomes to report, never bugs to fix.
 
 ## Commands
 
@@ -160,7 +199,6 @@ The `Makefile` is the entry point; every target shells out through `uv run pytho
 ```bash
 make install        # uv sync --extra dev  (NOT uv pip install -e; see gotchas below)
 make run            # full study: download if stale, then all pairs -> reports/
-make run-official   # only the three pre-specified pairs
 make test           # pytest -q
 make lint           # ruff check src tests scripts
 make typecheck      # mypy src
@@ -224,8 +262,8 @@ under `src/pairs_teardown/`:
   scripts both go through this; neither reimplements it.
 
 Orchestration is config-driven: `scripts/run_backtest.py` reads `configs/pairs.yaml` and
-calls `study.run_study` for every configured pair (`--official-only` restricts it to the
-three pre-specified ones), writing a metrics CSV plus a run manifest to `reports/results/`
+calls `study.run_study` for every configured pair, writing a metrics CSV plus a run
+manifest to `reports/results/`
 and figures to `reports/figures/`. `data/` and `reports/{figures,results}/`
 are gitignored except `.gitkeep` — never commit market data or generated outputs.
 
@@ -240,9 +278,12 @@ These five principles drive every design decision and are explicitly tested, not
    fitted sizing hedge ratio, or any in-sample metric). Both fail if the discipline is
    removed — verified by reintroducing a full-sample fit and watching them go red.
 2. **Survivorship bias** is acknowledged in the writeup, not engineered around.
-3. **No data-snooping.** The three pairs are pre-specified from economic reasoning, not
-   mined by scanning combinations. Only a small, pre-declared parameter grid is tuned, and
-   only on in-sample data.
+3. **No data-snooping.** Pairs are pre-specified from economic reasoning, not mined by
+   scanning combinations, and **every pair is reported whatever it did**. There is no tier
+   field in the schema and no way to run a subset — enforced by
+   `test_study.py::test_table_has_no_tier_column` and
+   `test_config.py::test_pairs_load_as_one_flat_list`. Parameters are frozen a priori; the
+   window sweep is a reported sensitivity finding, never a parameter search.
 4. **Gross vs. net always reported side by side** — every result appears before and after
    transaction costs.
 5. **In-sample vs. out-of-sample always separated** — parameters come from IS data only;
