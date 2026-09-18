@@ -60,6 +60,25 @@ pairs, chosen the same way and run through identical code, moved the mean from c
 negative to indistinguishable from zero. Nothing was wrong with the machinery — the
 conclusion was simply never as stable as the tables made it look.
 
+### The holdout (pre-registered, 2025-01 → 2026-08)
+
+Study 1 above was scored on 2022–2024. After it was written, a replication and one
+methodological variant were pre-registered ([`PREREGISTRATION.md`](PREREGISTRATION.md),
+committed before any later price was downloaded) and scored once on twenty unseen months:
+
+| | |
+|---|---|
+| Frozen strategy, replicated | **2 of 10** profitable, mean **−3.5%** (p = 0.36), no pair significant |
+| Best holdout Sharpe vs. expected best-of-10 under no edge | **1.24 vs. 1.23** — exactly the noise floor |
+| 2022–24 winners that won again | **0 of 4**; Spearman ρ between periods **−0.56** (p = 0.09) |
+| Walk-forward variant (annual refit, half-life-set window) | **−7.8 pp** vs. frozen on 2022–24; **+2.9 pp** [−10, +14] on the holdout; individual pairs move by up to 46 pp |
+
+Study 1's numbers did not replicate; its thesis did. The pair a reader would have kept
+(UNP/CSX, +55.9%) lost 11.5%; the pair they would have dropped (UPS/FDX, −42.4%) made
+24.4%. And the textbook fix for the diagnosed problem — re-estimate what goes stale, size
+the window from the half-life — produced no detectable improvement, only a different draw.
+Details: [`notebooks/06_holdout.ipynb`](notebooks/06_holdout.ipynb).
+
 Full argument: [`notebooks/05_writeup.ipynb`](notebooks/05_writeup.ipynb).
 Tables and figures: [`notebooks/03_backtest_results.ipynb`](notebooks/03_backtest_results.ipynb).
 Robustness checks: [`notebooks/04_sensitivity_analysis.ipynb`](notebooks/04_sensitivity_analysis.ipynb).
@@ -79,6 +98,7 @@ recording exactly what was run, and three figures per pair. It is incremental �
 the config, the package source, or the cached prices changed.
 
 ```
+make run-holdout # the pre-registered holdout: download through 2026-08, run both arms once
 make test        make lint        make typecheck
 make notebooks   # execute every notebook to check it still runs
 make clean       # wipe reports/ (keeps cached prices)
@@ -98,15 +118,16 @@ src/pairs_teardown/
   backtest/     the engine (one-bar position lag) and the cost model
   metrics/      Sharpe (with SE), drawdown, turnover, gross/net summary
   plotting/     spread, equity, drawdown figures
-  study.py      the chain assembled: run a pair end-to-end, tabulate
+  study.py      the chain assembled: run a pair end-to-end (frozen split, and walk-forward), tabulate
   config.py     load + validate configs/pairs.yaml
 
 notebooks/
-  01 data  ->  02 cointegration  ->  03 results  ->  04 sensitivity  ->  05 writeup
+  01 data  ->  02 cointegration  ->  03 results  ->  04 sensitivity  ->  05 writeup  ->  06 holdout
+PREREGISTRATION.md   the holdout plan, committed before the holdout data existed
 ```
 
 All logic lives in tested, importable modules. Notebooks import and call; they contain no
-strategy code. 123 tests, all on synthetic data with known answers — the suite never
+strategy code. 137 tests, all on synthetic data with known answers — the suite never
 touches the network.
 
 ## The statistics
@@ -141,7 +162,9 @@ prose:
    `run_study` has no way to run a subset.
 4. **Gross and net always together.** `summary()` returns both in one block; they are not
    separable through the API. Every Sharpe in that block carries its standard error.
-5. **In-sample and out-of-sample always separated.** OOS scored once, reported as-is.
+5. **In-sample and out-of-sample always separated.** OOS scored once, reported as-is. The
+   holdout extends this: the plan was committed before the data existed, and the walk-forward
+   arm's leak guard (`test_study.py`) checks that no refit sees data from its own segment.
 
 A note on rule 3: this project originally split its pairs into an "official" headline set
 and a "sanity check" set. That structure was a mistake — it would have let the same data

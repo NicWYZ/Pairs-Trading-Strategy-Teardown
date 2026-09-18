@@ -88,6 +88,13 @@ regression, not a stylistic choice. Completed so far:
   period × basis). One index matrix per (pair, period) is shared by gross and net so their
   intervals differ only through costs. `n_trades` is counted **per period** from the full
   position series before slicing (it was once the full-sample count copied into every row).
+  `run_pair_walk_forward` / `run_study_walk_forward` are Arm B: identical to `run_pair`
+  before the split, then calendar-year segments with the sizing hedge re-fit on data strictly
+  before each segment and the window from `walk_forward_window`; z-scores are spliced and
+  positions come from one `target_positions` pass; a non-positive refit hedge means a flat
+  segment. `segments_frame` records every refit. The engine now charges `|position|·|Δg|` on
+  a re-hedge (zero for Arm A) and `validate_step_hedge_ratio` replaces the rolling-noise guard
+  on that path.
 - `scripts/run_backtest.py` — the reproduction entry point, now only argparse + file
   writing over `study.py`. Writes `reports/results/metrics.csv` (long-form: pair x period
   x gross/net), `inference.csv` (same keys, uncertainty columns), a `run_manifest.json`
@@ -133,6 +140,11 @@ regression, not a stylistic choice. Completed so far:
   which notebook 05 **reads rather than transcribes** — same one-source discipline as
   metrics.csv. Nothing here may feed back into the config: adopting a swept value would turn
   an out-of-sample result into an in-sample one.
+- `notebooks/06_holdout.ipynb` — reads `reports/results/` and `reports/results_holdout/`
+  only. §1 data-integrity check (new download reproduces the manifest's hedge ratios to
+  1e-7), §2 Arm A replication, §3 persistence (the pre-registered test of the thesis), §4
+  Arm B vs Arm A on both windows with the segment table, §5 conclusion. Fails with a clear
+  message if the holdout has not been run.
 - `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles. §2.3
   documents the removal of the pair tiers as an error the study made and corrected; §2.3b
   carries the cointegration-persistence finding plus the Johansen and half-life refinements;
@@ -147,7 +159,7 @@ regression, not a stylistic choice. Completed so far:
 - `README.md` — the public-facing summary: the finding, how to run it, and where the five
   rules are enforced.
 
-123 tests pass. `charts.py` has no direct tests; the logic that used to sit in
+137 tests pass. `charts.py` has no direct tests; the logic that used to sit in
 `scripts/run_backtest.py` is now covered via `study.py`. `make lint`, `make typecheck` and
 `ruff format --check` are all clean.
 
@@ -163,6 +175,17 @@ average effect, and any small-universe study reports whatever its pair selection
 **Do not "fix" this back into a clean negative result.** Reverting to a smaller or tiered
 universe would restore a tidier headline by discarding the evidence that the headline was
 never stable.
+
+**The pre-registered holdout (Sept 2026) is the third half.** `PREREGISTRATION.md` was
+committed (e16c645) before any price after 2024-12-31 was downloaded; `make run-holdout`
+then ran both arms once on 2025-01 → 2026-08. Arm A (frozen strategy): 2/10 profitable,
+mean −3.5%, nothing significant, best Sharpe 1.24 vs expected best-of-10 of 1.23. 0 of the
+four 2022–24 winners repeated (ρ = −0.56). Arm B (walk-forward: annual refit on an anchored
+expanding window, window = clip(round(2·HL), 20, 250)): −7.8pp vs Arm A on 2022–24,
++2.9pp [−10, +14] on the holdout, per-pair moves up to 46pp — reshuffling, not improvement.
+**Do not add a third arm, re-tune Arm B's rule, or re-run the holdout with changes**; a
+change after the download is reported as a deviation, not adopted. Outputs live in
+`reports/results_holdout/` (gitignored like the rest); notebook 06 reads them.
 
 **The inference layer is the second half of that finding.** Every OOS Sharpe has an SE of
 0.58; no positive pair survives Holm; the best pair's Sharpe is what the best of ten null

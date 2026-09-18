@@ -570,6 +570,17 @@ them and corrects for multiplicity, without changing a single backtest number.
 Rule for this stage, same as the others: nothing here may feed back into the strategy.
 The half-lives in particular are a diagnosis of the window, not a licence to re-tune it.
 
+### Stage 10 — Pre-registered holdout and walk-forward variant
+
+`PREREGISTRATION.md` (committed before the data existed) fixes two arms on 2025-01-01 →
+2026-08-31: Arm A, the frozen strategy with its hedge re-fit through 2024; Arm B, annual
+walk-forward re-estimation with the window set from the half-life. Endpoints: per-pair
+inference as in Stage 9, persistence of the 2022–24 ranking (Spearman), and Arm B − Arm A
+with a bootstrap over pairs. `configs/pairs_holdout.yaml`, `make run-holdout`,
+`notebooks/06_holdout.ipynb`. Scored once. Result: no replication of Study 1's numbers,
+direct confirmation of its thesis (0 of 4 winners repeated), and no detectable effect of
+the variant.
+
 ## 9. How to Reproduce (exact commands)
 
 ```bash
