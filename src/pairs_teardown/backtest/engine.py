@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from pairs_teardown.backtest.costs import CostModel
@@ -50,6 +51,29 @@ def validate_sizing_hedge_ratio(hedge_ratio: pd.Series, max_std: float = 0.05) -
         )
 
 
+def validate_step_hedge_ratio(hedge_ratio: pd.Series, refit_dates: list[pd.Timestamp]) -> None:
+    """
+    Guard for the walk-forward sizing path: the hedge ratio may change only at
+    the given refit dates, must be constant in between, and must be finite.
+
+    This is the deliberate counterpart of ``validate_sizing_hedge_ratio``. A
+    rolling estimate is rejected there because it drifts every day; an annual
+    refit is a step function with a handful of pre-specified steps, which is a
+    different object and gets its own check rather than a bypass flag.
+    """
+    valid = hedge_ratio.dropna()
+    if not np.isfinite(valid.to_numpy()).all():
+        raise UnstableHedgeRatioError("Step hedge ratio contains non-finite values.")
+    changes = valid.index[valid.diff().fillna(0.0).abs() > 0]
+    allowed = set(pd.DatetimeIndex(refit_dates))
+    stray = [d for d in changes if d not in allowed]
+    if stray:
+        raise UnstableHedgeRatioError(
+            f"Step hedge ratio changes on {len(stray)} date(s) that are not refit dates, "
+            f"first: {stray[0]}. Sizing may only be re-estimated at pre-specified refits."
+        )
+
+
 @dataclass
 class BacktestResult:
     returns: pd.Series  # net daily strategy return (after costs)
@@ -79,11 +103,15 @@ def run_backtest(
 
     P&L model: holding +1 'spread unit' = long $1 of A and short $g of B,
     so the per-unit daily return is r_A - g * r_B. Costs are charged on the
-    traded notional |Δposition| * (1 + |g|) whenever the position changes.
+    traded notional |Δposition| * (1 + |g|) whenever the position changes, and
+    on |position| * |Δg| whenever the hedge ratio changes while a position is
+    held — re-hedging means trading the B leg, and that is not free. For a
+    constant hedge ratio the second term is identically zero.
 
     By default, validates that `hedge_ratio` is stable enough to safely size
     trades with (see validate_sizing_hedge_ratio). Pass skip_hedge_validation=True
-    only for deliberate stress-testing / diagnostic work, never for production runs.
+    only for deliberate stress-testing / diagnostic work, or after the caller
+    has run ``validate_step_hedge_ratio`` on a pre-specified refit schedule.
     """
 
     if not skip_hedge_validation:
@@ -98,7 +126,8 @@ def run_backtest(
     gross = (held * (r_a - g * r_b)).fillna(0.0)
 
     dpos = held.diff().fillna(0.0).abs()  # change in held position
-    traded_notional = (dpos * (1 + g.abs())).fillna(0.0)
+    dg = g.diff().fillna(0.0).abs()  # change in the hedge applied to a held position
+    traded_notional = (dpos * (1 + g.abs())).fillna(0.0) + (held.abs() * dg).fillna(0.0)
     cost = cost_model.cost(traded_notional)
 
     net = gross - cost

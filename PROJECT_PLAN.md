@@ -548,6 +548,28 @@ Work in stages. Each stage ends with something that runs and is tested before mo
 
 ---
 
+### Stage 9 — Statistical inference (added after Stage 8)
+
+Point estimates were the whole output through Stage 8. This stage attaches uncertainty to
+them and corrects for multiplicity, without changing a single backtest number.
+
+- `stats/cointegration.py`: `johansen_trace` (second, symmetric cointegration test) and
+  `half_life` (OU / AR(1) fit with delta-method SE). `adf_pvalue` documents why an ADF on
+  an OLS residual is too liberal.
+- `stats/inference.py`: `sharpe_se` (Lo 2002), `stationary_bootstrap_indices` /
+  `bootstrap_ci` (Politis–Romano 1994), `holm_adjust` (Holm 1979), `expected_max_sharpe`
+  (Bailey & López de Prado 2014). Each tested against a closed form or Monte Carlo.
+- `metrics/performance.py`: `sharpe_se` in every block.
+- `config.py`: `InferenceConfig` — the bootstrap scheme is committed config, not a notebook
+  argument.
+- `study.py`: `inference_frame`; `n_trades` counted per period.
+- `scripts/run_backtest.py`: writes `inference.csv` beside `metrics.csv`.
+- Notebooks: 02 §2b (Johansen) and §3b (half-life); 03 §5b (per-pair inference, forest
+  plot, expected-max-Sharpe); 05 §2.3b, §2.5b, §3–5 updated.
+
+Rule for this stage, same as the others: nothing here may feed back into the strategy.
+The half-lives in particular are a diagnosis of the window, not a licence to re-tune it.
+
 ## 9. How to Reproduce (exact commands)
 
 ```bash

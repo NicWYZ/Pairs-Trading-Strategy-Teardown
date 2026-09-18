@@ -1,4 +1,16 @@
 # ---------------------------------------------------------------------------
+# HOLDOUT STUDY CONFIGURATION — see PREREGISTRATION.md.
+#
+# Identical to configs/pairs.yaml except for three lines:
+#   data.end            2024-12-31 -> 2026-08-31   (the genuinely unseen window)
+#   split.in_sample_end 2021-12-31 -> 2024-12-31   (everything already reported
+#                                                    becomes the fit window)
+#   output.*            -> reports/*_holdout        (never overwrite Study 1)
+#
+# This file was committed BEFORE any price after 2024-12-31 was downloaded.
+# Nothing in it may change after that download. Both arms run on it once.
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Pairs-trading teardown — study configuration.
 #
 # This file is the single source of truth for every parameter in the study.
@@ -17,7 +29,7 @@
 
 data:
   start: "2015-01-01"
-  end: "2024-12-31"
+  end: "2026-08-31"
   # Adjusted close (yfinance auto_adjust=True) accounts for splits and
   # dividends; log prices are taken downstream, since multiplicative growth
   # breaks stationarity on levels.
@@ -34,7 +46,7 @@ data:
 # results (defensibility test, Section 5.11).
 # ---------------------------------------------------------------------------
 split:
-  in_sample_end: "2021-12-31"
+  in_sample_end: "2024-12-31"
 
 signal:
   # Rolling window (trading days) for both the rolling signal hedge ratio and
@@ -157,5 +169,5 @@ pairs:
     rationale: "Rate-regulated Southeast electric utilities; common rate-base and rate-sensitivity."
 
 output:
-  results_dir: "reports/results"
-  figures_dir: "reports/figures"
+  results_dir: "reports/results_holdout"
+  figures_dir: "reports/figures_holdout"

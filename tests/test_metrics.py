@@ -167,3 +167,11 @@ def test_summary_gross_net_share_turnover():
     # Turnover depends only on positions, so gross and net blocks must agree.
     s = summary(_make_result())
     assert s["net"]["turnover"] == pytest.approx(s["gross"]["turnover"])
+
+
+def test_summary_reports_sharpe_se_alongside_sharpe():
+    """No Sharpe leaves summary() without its standard error."""
+    s = summary(_make_result(), periods_per_year=1)
+    for basis in ("net", "gross"):
+        assert "sharpe_se" in s[basis]
+        assert s[basis]["sharpe_se"] > 0

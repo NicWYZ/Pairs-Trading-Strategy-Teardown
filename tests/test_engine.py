@@ -8,7 +8,11 @@ import pandas as pd
 import pytest
 
 from pairs_teardown.backtest.costs import CostModel
-from pairs_teardown.backtest.engine import UnstableHedgeRatioError, run_backtest
+from pairs_teardown.backtest.engine import (
+    UnstableHedgeRatioError,
+    run_backtest,
+    validate_step_hedge_ratio,
+)
 
 
 def test_hand_computed_pnl():
@@ -154,3 +158,45 @@ def test_skip_hedge_validation_flag_bypasses_check():
     price_b = pd.Series([100.0] * 7)
     target = pd.Series([1.0] * 7)
     run_backtest(price_a, price_b, target, noisy, CostModel(), skip_hedge_validation=True)
+
+
+# --------------------------------------------------------------------------- #
+# re-hedging cost and the step-function validator (walk-forward path)
+# --------------------------------------------------------------------------- #
+def test_hedge_change_while_holding_is_charged_as_a_trade():
+    """
+    Moving the hedge from 1.0 to 1.2 with a position held means trading 0.2 of
+    B per unit of spread. Charged at the cost rate; no charge when flat.
+    """
+    idx = pd.RangeIndex(6)
+    flat_px = pd.Series(100.0, index=idx)
+    target = pd.Series([1, 1, 1, 1, 1, 1], index=idx, dtype=float)
+    hedge = pd.Series([1.0, 1.0, 1.0, 1.2, 1.2, 1.2], index=idx)
+    cm = CostModel(commission_bps=0.0, slippage_bps=100.0)  # 1% per unit notional
+    res = run_backtest(flat_px, flat_px, target, hedge, cm, skip_hedge_validation=True)
+    # held = target.shift(1): 0,1,1,1,1,1 ; g = hedge.shift(1): nan,1,1,1,1.2,1.2
+    # day 1: open position, notional 1+|1| = 2 -> cost 0.02
+    # day 4: g steps 1.0 -> 1.2 with held=1 -> notional 0.2 -> cost 0.002
+    assert res.costs.iloc[1] == pytest.approx(0.02)
+    assert res.costs.iloc[4] == pytest.approx(0.002)
+    assert res.costs.drop(index=[1, 4]).abs().sum() == pytest.approx(0.0)
+
+
+def test_constant_hedge_incurs_no_rehedge_cost():
+    """For Arm A (constant hedge) the new cost term must be identically zero."""
+    idx = pd.RangeIndex(6)
+    flat_px = pd.Series(100.0, index=idx)
+    target = pd.Series([1, 1, 1, 1, 1, 1], index=idx, dtype=float)
+    hedge = pd.Series(1.0, index=idx)
+    res = run_backtest(flat_px, flat_px, target, hedge, CostModel(0.0, 100.0))
+    assert res.costs.iloc[2:].abs().sum() == pytest.approx(0.0)
+
+
+def test_step_validator_accepts_changes_only_on_refit_dates():
+    idx = pd.bdate_range("2020-01-01", periods=10)
+    h = pd.Series([1.0] * 5 + [1.3] * 5, index=idx)
+    validate_step_hedge_ratio(h, [idx[5]])
+    with pytest.raises(UnstableHedgeRatioError, match="not refit dates"):
+        validate_step_hedge_ratio(h, [idx[4]])
+    with pytest.raises(UnstableHedgeRatioError, match="non-finite"):
+        validate_step_hedge_ratio(h.replace(1.3, np.inf), [idx[5]])

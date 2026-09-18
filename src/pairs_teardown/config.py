@@ -20,6 +20,8 @@ __all__ = [
     "SignalConfig",
     "CostConfig",
     "BacktestConfig",
+    "InferenceConfig",
+    "WalkForwardConfig",
     "OutputConfig",
     "Pair",
     "load_config",
@@ -69,6 +71,44 @@ class BacktestConfig:
 
 
 @dataclass(frozen=True)
+class InferenceConfig:
+    """
+    Settings for the bootstrap intervals written to ``inference.csv``.
+
+    Fixed here, not in a notebook, so the resampling scheme is part of the
+    committed record of what was run and cannot be tuned after seeing which
+    interval excludes zero.
+    """
+
+    n_boot: int
+    mean_block: float
+    ci_level: float
+    seed: int
+
+
+@dataclass(frozen=True)
+class WalkForwardConfig:
+    """
+    Arm B of the pre-registered holdout study (see PREREGISTRATION.md).
+
+    Once per calendar year inside the evaluation window the sizing hedge ratio
+    is re-fit on the anchored expanding window, and the signal window is set by
+    a fixed rule from the half-life of that fitted spread:
+
+        window = clip(round(half_life_multiple * HL), window_min, window_max)
+
+    with an undetectable (infinite) half-life mapped to ``window_max``. The
+    refit frequency is annual and not configurable — fewer knobs, fewer
+    temptations. A refit that yields a non-positive hedge ratio means no hedge
+    exists; the pair is flat for that year.
+    """
+
+    half_life_multiple: float
+    window_min: int
+    window_max: int
+
+
+@dataclass(frozen=True)
 class OutputConfig:
     results_dir: str
     figures_dir: str
@@ -98,6 +138,8 @@ class Config:
     signal: SignalConfig
     costs: CostConfig
     backtest: BacktestConfig
+    inference: InferenceConfig
+    walk_forward: WalkForwardConfig
     output: OutputConfig
     pairs: tuple[Pair, ...]
 
@@ -173,6 +215,23 @@ def _validate(cfg: Config) -> None:
     if cfg.backtest.periods_per_year < 1:
         raise ValueError("config: backtest.periods_per_year must be >= 1")
 
+    inf = cfg.inference
+    if inf.n_boot < 100:
+        raise ValueError(f"config: inference.n_boot must be >= 100, got {inf.n_boot}")
+    if inf.mean_block < 1:
+        raise ValueError(f"config: inference.mean_block must be >= 1, got {inf.mean_block}")
+    if not 0.0 < inf.ci_level < 1.0:
+        raise ValueError(f"config: inference.ci_level must be in (0, 1), got {inf.ci_level}")
+
+    wf = cfg.walk_forward
+    if wf.half_life_multiple <= 0:
+        raise ValueError("config: walk_forward.half_life_multiple must be > 0")
+    if not 2 <= wf.window_min <= wf.window_max:
+        raise ValueError(
+            f"config: need 2 <= walk_forward.window_min ({wf.window_min}) "
+            f"<= walk_forward.window_max ({wf.window_max})"
+        )
+
     start = pd.Timestamp(cfg.data.start)
     end = pd.Timestamp(cfg.data.end)
     split = pd.Timestamp(cfg.split.in_sample_end)
@@ -215,6 +274,8 @@ def load_config(path: str | Path) -> Config:
         signal=SignalConfig(**raw["signal"]),
         costs=CostConfig(**raw["costs"]),
         backtest=BacktestConfig(**raw["backtest"]),
+        inference=InferenceConfig(**raw["inference"]),
+        walk_forward=WalkForwardConfig(**raw["walk_forward"]),
         output=OutputConfig(**raw["output"]),
         pairs=_parse_pairs(raw.get("pairs")),
     )

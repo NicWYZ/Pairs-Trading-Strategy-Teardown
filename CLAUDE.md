@@ -21,8 +21,20 @@ regression, not a stylistic choice. Completed so far:
   `data/raw/CVX_FOX_FOXA_KO_MA_PEP_RSG_SPY_V_VOO_WM_XOM_20150101_20241231.parquet`
   (all 12 tickers are always fetched together so the cache key stays stable).
 - `src/pairs_teardown/stats/cointegration.py` — `estimate_hedge_ratio` (OLS, IS window only),
-  `build_spread`, `adf_pvalue`, `engle_granger_pvalue`, and `analyze_pair` (bundles all four
-  into a `CointegrationResult` dataclass).
+  `build_spread`, `adf_pvalue`, `engle_granger_pvalue`, `johansen_trace` (system-based,
+  symmetric in the legs; returns the trace statistic against tabulated critical values),
+  `half_life` (discrete OU / AR(1) fit with a delta-method SE; `inf` when ρ ≥ 1), and
+  `analyze_pair` (bundles everything into a `CointegrationResult`). The `adf_pvalue`
+  docstring records why an ordinary ADF on an OLS-fitted spread is too liberal
+  (Engle–Granger 1987 / Phillips–Ouliaris 1990) — it is a descriptive diagnostic, and
+  `engle_granger_pvalue` is the test to cite.
+- `src/pairs_teardown/stats/inference.py` — uncertainty and multiplicity: `sharpe_se`
+  (Lo 2002, i.i.d. delta method), `sharpe_null_sd`, `sharpe_pvalue`,
+  `stationary_bootstrap_indices` + `bootstrap_ci` (Politis–Romano, percentile interval;
+  accepts precomputed indices so several statistics share one set of resamples),
+  `holm_adjust` (step-down FWER, no independence assumption), and `expected_max_sharpe`
+  (Bailey & López de Prado 2014 — the noise floor for "the best of N pairs"). Every function
+  is tested against a closed form or a Monte Carlo experiment (`tests/test_inference.py`).
 - `src/pairs_teardown/signals/spread.py` — `rolling_zscore` using trailing window only
   (no look-ahead).
 - `src/pairs_teardown/signals/rules.py` — `target_positions` with entry/exit thresholds
@@ -35,8 +47,9 @@ regression, not a stylistic choice. Completed so far:
   any hedge ratio series with std > 0.05 or sign-instability before it can silently corrupt
   the hedge. Pass `skip_hedge_validation=True` only for deliberate stress-test work.
 - `src/pairs_teardown/metrics/performance.py` — `sharpe_ratio`, `max_drawdown`, `turnover`,
-  and `summary`. All pure functions of a return/position series, so every one is closed-form
-  testable. Conventions are fixed and documented in the module docstring: simple daily
+  and `summary`. Every metrics block also carries `sharpe_se` (from `stats/inference.py`),
+  so no Sharpe leaves the package without its standard error. All pure functions of a
+  return/position series, so every one is closed-form testable. Conventions are fixed and documented in the module docstring: simple daily
   returns, sample std (ddof=1), NaNs dropped rather than filled, drawdown returned as a
   signed non-positive fraction. `summary` duck-types its `result` argument (anything exposing
   `returns`, `gross_returns`, `held_positions`) so `metrics/` has no import dependency on
@@ -51,7 +64,9 @@ regression, not a stylistic choice. Completed so far:
   Pylance. `plot_equity_curve` overlays the optional gross curve on the net one so the
   transaction-cost wedge is visible as the gap between the lines.
 - `src/pairs_teardown/config.py` — `load_config` parses `configs/pairs.yaml` into frozen
-  dataclasses and *validates* it. Validation is not decorative: it rejects `entry <= exit`
+  dataclasses and *validates* it. `InferenceConfig` (`n_boot`, `mean_block`, `ci_level`,
+  `seed`) fixes the bootstrap scheme in the committed config so it cannot be tuned after
+  seeing which intervals exclude zero. Validation is not decorative: it rejects `entry <= exit`
   (incoherent hysteresis), a split date outside the data range (one evaluation period would
   be empty), duplicate pair names, and — hard-coded — `sizing_hedge: "rolling"`, which is
   the one misconfiguration that silently destroys market neutrality. `SplitConfig` owns
@@ -67,10 +82,16 @@ regression, not a stylistic choice. Completed so far:
   chain instead of reimplementing it (reimplementing it inline is exactly how notebook 03
   acquired its leak), and the discipline is testable. `run_study` has no subset argument
   and `to_frame` emits no tier column — an API that could quietly omit a pair would be a way
-  to launder a bad result out of the study.
+  to launder a bad result out of the study. `inference_frame` produces one row per
+  (pair, period, basis) with Lo SE, normal-approximation p, stationary-bootstrap intervals
+  on Sharpe and total return, and Holm-adjusted p (family = the pairs within one
+  period × basis). One index matrix per (pair, period) is shared by gross and net so their
+  intervals differ only through costs. `n_trades` is counted **per period** from the full
+  position series before slicing (it was once the full-sample count copied into every row).
 - `scripts/run_backtest.py` — the reproduction entry point, now only argparse + file
   writing over `study.py`. Writes `reports/results/metrics.csv` (long-form: pair x period
-  x gross/net), a `run_manifest.json` recording parameters + hedge ratios + timestamp, and
+  x gross/net), `inference.csv` (same keys, uncertainty columns), a `run_manifest.json`
+  recording parameters + hedge ratios + bootstrap scheme + timestamp, and
   three figures per pair, closing matplotlib figures as it goes (10 pairs x 3 = 30 live
   figures otherwise).
 - `scripts/download_data.py` — now config-driven (`--config`) rather than hardcoding
@@ -90,13 +111,22 @@ regression, not a stylistic choice. Completed so far:
   separately in-sample and out-of-sample: 3/10 pass in-sample, 3/10 out-of-sample, but only
   **1/10 (MA/V) in both**. The property the whole method assumes does not persist. Also shows
   UPS/FDX's hedge ratio changing *sign* across the split (+0.84 -> -0.35), which is why it is
-  the worst performer. Selecting pairs on these p-values would be data-snooping, so nothing
+  the worst performer. §2b runs Johansen alongside Engle–Granger: they agree on one pair
+  in-sample (MA/V), and EG misses SPY/VOO (p = 0.09) where Johansen's trace is 8x its
+  critical value — a count is a property of the test. §3b estimates OU half-lives with SEs:
+  5 of 10 in-sample half-lives exceed the 60-day window, and for XOM/CVX and UPS/FDX φ is
+  within 2 SE of zero — no reversion detectable (Dickey–Fuller bias means a half-life point
+  estimate is always finite, which is why the SE is mandatory). Selecting pairs or windows on any of this would be data-snooping, so nothing
   here filters the universe — they are diagnostics that explain the backtest.
 - `notebooks/03_backtest_results.ipynb` — the authoritative results. Reads `metrics.csv` +
   `run_manifest.json` (so it cannot disagree with the pipeline), tabulates gross-vs-net and
   IS-vs-OOS, reconciles the cost drag against `turnover x (1+|g|) x bps`, reports the
-  cross-sectional dispersion, regenerates figures through `study.run_study`. **Results only —
-  no sweeps**, deliberately, so results and robustness cannot be confused.
+  cross-sectional dispersion, regenerates figures through `study.run_study`. §5b reads
+  `inference.csv`: the SE on any OOS Sharpe is 0.58; UNP/CSX's raw p = 0.039 becomes 0.35
+  after Holm; the only Holm-significant result is SPY/VOO's *negative* Sharpe (a zero-
+  variance spread measures the cost of trading it with no noise); and the best observed
+  Sharpe (1.20) is half an SE above the expected best of ten null strategies (0.91).
+  **Results only — no sweeps**, deliberately, so results and robustness cannot be confused.
 - `notebooks/04_sensitivity_analysis.ipynb` — every frozen parameter swept one at a time
   through the same `run_pair`: window, entry/exit bands, cost (with per-pair breakeven),
   split date, rolling-vs-static signal hedge. Writes `reports/results/sensitivity.csv`,
@@ -105,7 +135,9 @@ regression, not a stylistic choice. Completed so far:
   an out-of-sample result into an in-sample one.
 - `notebooks/05_writeup.ipynb` — the narrative, organized around the five principles. §2.3
   documents the removal of the pair tiers as an error the study made and corrected; §2.3b
-  carries the cointegration-persistence finding; §2.6 cites notebook 04.
+  carries the cointegration-persistence finding plus the Johansen and half-life refinements;
+  §2.5b carries the per-pair inference and the expected-max-Sharpe argument; §2.6 cites
+  notebook 04. The conclusion lists five converging lines, the fifth being selection.
 - `.pre-commit-config.yaml` — ruff, ruff-format, nbstripout, plus whitespace/large-file
   checks. Fast hooks only; pytest and mypy stay in CI, because a slow commit hook gets
   bypassed and a bypassed hook enforces nothing. **nbstripout means committed notebooks
@@ -115,7 +147,7 @@ regression, not a stylistic choice. Completed so far:
 - `README.md` — the public-facing summary: the finding, how to run it, and where the five
   rules are enforced.
 
-85 tests pass. `charts.py` has no direct tests; the logic that used to sit in
+123 tests pass. `charts.py` has no direct tests; the logic that used to sit in
 `scripts/run_backtest.py` is now covered via `study.py`. `make lint`, `make typecheck` and
 `ruff format --check` are all clean.
 
@@ -132,13 +164,23 @@ average effect, and any small-universe study reports whatever its pair selection
 universe would restore a tidier headline by discarding the evidence that the headline was
 never stable.
 
+**The inference layer is the second half of that finding.** Every OOS Sharpe has an SE of
+0.58; no positive pair survives Holm; the best pair's Sharpe is what the best of ten null
+strategies is expected to produce. `inference.csv` is written by the pipeline (not computed
+in notebooks) and its scheme is fixed in the config — do not move the bootstrap into a
+notebook where the block length could be tuned after seeing the intervals.
+
 **Notebook order is `01 data -> 02 cointegration -> 03 results -> 04 sensitivity -> 05
 writeup`.** Sensitivity comes *after* results because it is a check on them, not an input.
 Notebook 05 depends on notebook 04 having run (it reads `sensitivity.csv`); `make notebooks`
 executes them in order, so this only bites if 05 is opened standalone, and it fails with a
 message saying so rather than silently.
 
-Remaining gap: `plotting/charts.py` still has no tests.
+Remaining gaps: `plotting/charts.py` still has no tests. The half-life SE is homoskedastic
+OLS (no HAC); the bootstrap block length is fixed a priori rather than Politis–White
+selected; Lo's SE is i.i.d. — the bootstrap is the check on it. All three are documented in
+the writeup's limitations rather than fixed, deliberately, to keep the project the size of
+a first project.
 
 ### Critical design note: no pair tiers
 

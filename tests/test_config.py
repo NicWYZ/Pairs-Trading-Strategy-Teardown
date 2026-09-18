@@ -28,6 +28,8 @@ BASE = {
     },
     "costs": {"commission_bps": 1.0, "slippage_bps": 5.0},
     "backtest": {"periods_per_year": 252},
+    "inference": {"n_boot": 2000, "mean_block": 10, "ci_level": 0.95, "seed": 0},
+    "walk_forward": {"half_life_multiple": 2, "window_min": 20, "window_max": 250},
     "output": {"results_dir": "reports/results", "figures_dir": "reports/figures"},
     "pairs": [
         {"name": "WM/RSG", "a": "WM", "b": "RSG", "rationale": "duopoly"},
@@ -187,4 +189,41 @@ def test_missing_required_pair_key_rejected(tmp_path):
         del c["pairs"][0]["b"]
 
     with pytest.raises(ValueError, match="missing required key"):
+        load_config(write(tmp_path, m))
+
+
+def test_inference_settings_load(tmp_path):
+    cfg = load_config(write(tmp_path))
+    assert cfg.inference.n_boot == 2000
+    assert cfg.inference.mean_block == 10
+    assert cfg.inference.ci_level == 0.95
+
+
+def test_too_few_bootstrap_draws_rejected(tmp_path):
+    def m(c):
+        c["inference"]["n_boot"] = 10
+
+    with pytest.raises(ValueError, match="n_boot"):
+        load_config(write(tmp_path, m))
+
+
+def test_bad_ci_level_rejected(tmp_path):
+    def m(c):
+        c["inference"]["ci_level"] = 1.5
+
+    with pytest.raises(ValueError, match="ci_level"):
+        load_config(write(tmp_path, m))
+
+
+def test_walk_forward_settings_load(tmp_path):
+    cfg = load_config(write(tmp_path))
+    assert cfg.walk_forward.half_life_multiple == 2
+    assert (cfg.walk_forward.window_min, cfg.walk_forward.window_max) == (20, 250)
+
+
+def test_walk_forward_window_bounds_rejected(tmp_path):
+    def m(c):
+        c["walk_forward"]["window_min"] = 300
+
+    with pytest.raises(ValueError, match="window_min"):
         load_config(write(tmp_path, m))

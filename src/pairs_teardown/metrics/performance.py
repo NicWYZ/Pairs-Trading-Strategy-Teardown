@@ -10,9 +10,14 @@ useless in a teardown whose entire point is honest measurement.
 Conventions used throughout (and why):
 
 * **Returns are simple (arithmetic) daily returns of a self-financing spread.**
-  Holding +1 "spread unit" is long $1 of A and short $g of B, so the position is
-  dollar-neutral and there is no natural capital base to earn a risk-free rate on.
-  The Sharpe therefore defaults to a risk-free rate of 0.
+  Holding +1 "spread unit" is long $1 of A and short $g of B — hedge-neutral, and
+  dollar-neutral only when g = 1 — so there is no natural capital base to earn a
+  risk-free rate on. The Sharpe therefore defaults to a risk-free rate of 0.
+
+* **Every Sharpe carries its standard error.** ``sharpe_se`` is Lo's (2002)
+  i.i.d. delta-method SE, computed by :mod:`pairs_teardown.stats.inference`. A
+  Sharpe without an SE is a point in a cloud of unknown size; three years of
+  daily data put that cloud at roughly +/-0.6 for a strategy with no edge.
 
 * **Sample standard deviation (ddof=1).**
 
@@ -25,10 +30,12 @@ Conventions used throughout (and why):
   about direction when the value is tabulated next to returns.
 """
 
-from __future__ import annotations  # type: ignore
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+from pairs_teardown.stats.inference import sharpe_se
 
 __all__ = ["sharpe_ratio", "max_drawdown", "turnover", "summary"]
 
@@ -126,6 +133,7 @@ def _perf_block(
             "total_return": float("nan"),
             "annualized_return": float("nan"),
             "sharpe": float("nan"),
+            "sharpe_se": float("nan"),
             "max_drawdown": float("nan"),
             "turnover": float("nan"),
             "hit_rate": float("nan"),
@@ -154,6 +162,7 @@ def _perf_block(
         "total_return": total_return,
         "annualized_return": annualized_return,
         "sharpe": sharpe_ratio(r, periods_per_year, risk_free_rate),
+        "sharpe_se": sharpe_se(r, periods_per_year),
         "max_drawdown": max_drawdown(equity),
         "turnover": turnover(held_positions, periods_per_year),
         "hit_rate": hit_rate,
@@ -176,8 +185,8 @@ def summary(
     lightweight stand-in).
 
     Returns a nested dict ``{"net": {...}, "gross": {...}}`` where each block
-    contains: total_return, annualized_return, sharpe, max_drawdown, turnover,
-    hit_rate, n_periods. The nesting is deliberately shaped for direct tabulation
+    contains: total_return, annualized_return, sharpe, sharpe_se, max_drawdown,
+    turnover, hit_rate, n_periods. The nesting is deliberately shaped for direct tabulation
     into a gross-vs-net table, and can be called separately on in-sample and
     out-of-sample slices for the IS/OOS comparison.
     """

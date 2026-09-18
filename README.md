@@ -23,10 +23,13 @@ costs:
 | Cross-sectional mean | **+0.6%** — indistinguishable from zero (t = 0.08, p = 0.94) |
 | Cross-sectional std dev | **26 percentage points** |
 | Cost drag | consumes **~80%** of the mean gross return |
+| Standard error on any one pair's Sharpe | **0.58** (three years of daily data) |
+| Positive pairs surviving a Holm correction | **0 of 10** |
+| Best observed Sharpe vs. expected best-of-10 under no edge | **1.20 vs. 0.91** |
 
 The answer is not "pairs trading works" or "pairs trading fails". It is that **the
 dispersion across similar pairs dwarfs the average effect**, so any small-universe study
-reports whichever conclusion its pair selection produces. Four independent lines converge
+reports whichever conclusion its pair selection produces. Five independent lines converge
 on that:
 
 - **The premise** — only **1 of 10** pairs is cointegrated in *both* the in-sample and
@@ -36,11 +39,21 @@ on that:
   windows, and the pre-registered window is the *only* one of six with a positive
   cross-sectional mean.
 - **The cross-section** — a mean of +0.6% inside a 26pp standard deviation.
+- **Selection** — no positive pair's Sharpe survives a Holm correction across the ten, and
+  the best one (UNP/CSX, 1.20) sits half a standard error above the expected maximum of ten
+  strategies with no edge at all. The only Holm-significant result is SPY/VOO, negatively:
+  paying 6 bps to trade a spread with no variance loses money with near certainty.
 
 A useful corrective on costs: the per-pair breakeven cost is **bimodal**. Four pairs lose
 money at *zero* cost and four clear the 6 bps charge by 4–16x, so for 8 of 10 pairs the cost
 assumption barely affects the verdict. Most losing pairs have no gross edge, rather than an
 edge eaten by friction.
+
+A second corrective on the premise: cointegration counts depend on the test (Engle–Granger
+and Johansen agree on one pair in-sample), and the estimated half-lives of mean reversion
+exceed the 60-day signal window for five of ten pairs — and for the slowest two, the
+reversion coefficient is within two standard errors of zero, so they cannot be told apart
+from random walks.
 
 At an earlier six-pair stage this project reported a confident negative result. Four more
 pairs, chosen the same way and run through identical code, moved the mean from clearly
@@ -60,8 +73,9 @@ make install     # uv sync --extra dev
 make run         # downloads prices if stale, then the full study
 ```
 
-`make run` writes `reports/results/metrics.csv`, a `run_manifest.json` recording exactly
-what was run, and three figures per pair. It is incremental — the backtest re-runs only if
+`make run` writes `reports/results/metrics.csv`, `inference.csv` (standard errors,
+bootstrap intervals and adjusted p-values for every cell of it), a `run_manifest.json`
+recording exactly what was run, and three figures per pair. It is incremental — the backtest re-runs only if
 the config, the package source, or the cached prices changed.
 
 ```
@@ -78,10 +92,11 @@ reproduce every number.
 ```
 src/pairs_teardown/
   data/         download + cache (parquet), align and clean
-  stats/        ADF, Engle–Granger, OLS hedge ratio
+  stats/        cointegration: OLS hedge ratio, ADF, Engle–Granger, Johansen, OU half-life
+                inference: Lo (2002) Sharpe SE, stationary bootstrap, Holm, expected max Sharpe
   signals/      rolling z-score, entry/exit rules with hysteresis
   backtest/     the engine (one-bar position lag) and the cost model
-  metrics/      Sharpe, drawdown, turnover, gross/net summary
+  metrics/      Sharpe (with SE), drawdown, turnover, gross/net summary
   plotting/     spread, equity, drawdown figures
   study.py      the chain assembled: run a pair end-to-end, tabulate
   config.py     load + validate configs/pairs.yaml
@@ -91,8 +106,25 @@ notebooks/
 ```
 
 All logic lives in tested, importable modules. Notebooks import and call; they contain no
-strategy code. 85 tests, all on synthetic data with known answers — the suite never touches
-the network.
+strategy code. 123 tests, all on synthetic data with known answers — the suite never
+touches the network.
+
+## The statistics
+
+The point estimates are the easy part; the project's statistical content is in what is
+attached to them. Each tool has a closed-form or Monte Carlo test in `tests/`.
+
+| Question | Tool | Where |
+|---|---|---|
+| Is the spread cointegrated? | Engle–Granger (residual-based, with the MacKinnon correction for an estimated hedge ratio) **and** Johansen trace (system-based, symmetric in the legs) | `stats/cointegration.py` |
+| How fast does it revert? | Discrete Ornstein–Uhlenbeck fit; half-life = −ln 2 / ln(1+φ) with a delta-method SE | `stats/cointegration.py` |
+| How precise is one pair's Sharpe? | Lo (2002) analytic SE; Politis–Romano stationary bootstrap for serially dependent daily P&L | `stats/inference.py` |
+| Which of ten results survive? | Holm step-down adjustment (no independence assumption) | `stats/inference.py` |
+| Is the best pair better than the best of ten coin flips? | Expected maximum of N null Sharpes (Bailey & López de Prado 2014) | `stats/inference.py` |
+
+The bootstrap scheme (draws, block length, seed) is fixed in `configs/pairs.yaml` before any
+interval is seen, and the intervals are written by the pipeline to `inference.csv` rather
+than computed in a notebook — the same one-source discipline as the returns.
 
 ## The five rules, and where they are enforced
 
@@ -108,7 +140,7 @@ prose:
    `Pair` has no tier field, `to_frame` emits no column that could rank pairs, and
    `run_study` has no way to run a subset.
 4. **Gross and net always together.** `summary()` returns both in one block; they are not
-   separable through the API.
+   separable through the API. Every Sharpe in that block carries its standard error.
 5. **In-sample and out-of-sample always separated.** OOS scored once, reported as-is.
 
 A note on rule 3: this project originally split its pairs into an "official" headline set
@@ -119,8 +151,9 @@ fixing it.
 
 ## Caveats
 
-Ten pairs is a small cross-section; the study's own conclusion is partly a statement about
-how small. Pairs were chosen in waves, with later waves selected while earlier results were
+Ten pairs is a small cross-section, and three years is a short out-of-sample window: the
+standard error of a Sharpe ratio falls as 1/√T, so halving 0.58 would need twelve years per
+pair. The study's own conclusion is partly a statement about how small both are. Pairs were chosen in waves, with later waves selected while earlier results were
 known. Costs are a flat per-side assumption with no market-impact model, no borrow costs and
 no short-availability constraints. All pairs are US large-cap equities over one decade.
 

@@ -23,12 +23,25 @@ from pairs_teardown.config import (
     Config,
     CostConfig,
     DataConfig,
+    InferenceConfig,
     OutputConfig,
+    WalkForwardConfig,
     Pair,
     SignalConfig,
     SplitConfig,
 )
-from pairs_teardown.study import PERIODS, run_pair, run_study, to_frame
+from pairs_teardown.study import (
+    PERIODS,
+    inference_frame,
+    refit_dates,
+    run_pair,
+    run_pair_walk_forward,
+    run_study,
+    run_study_walk_forward,
+    segments_frame,
+    to_frame,
+    walk_forward_window,
+)
 
 # 800 business days ~ 2015-01-01 onward, split so that both periods are ample.
 N = 800
@@ -53,6 +66,8 @@ def cfg() -> Config:
         ),
         costs=CostConfig(commission_bps=1.0, slippage_bps=5.0),
         backtest=BacktestConfig(periods_per_year=252),
+        inference=InferenceConfig(n_boot=200, mean_block=5.0, ci_level=0.95, seed=0),
+        walk_forward=WalkForwardConfig(half_life_multiple=2.0, window_min=20, window_max=250),
         output=OutputConfig(results_dir="reports/results", figures_dir="reports/figures"),
         pairs=(
             Pair(name="A/B", a="A", b="B", rationale="synthetic"),
@@ -252,3 +267,215 @@ def test_in_sample_shorter_than_signal_window_raises(cfg):
     late_split = Config(**{**cfg.__dict__, "split": SplitConfig(in_sample_end="2015-01-20")})
     with pytest.raises(ValueError, match="shorter than signal.window"):
         run_pair(late_split.pairs[0], make_prices(), late_split)
+
+
+# --------------------------------------------------------------------------- #
+# per-period trade counts
+# --------------------------------------------------------------------------- #
+def test_n_trades_is_counted_per_period(cfg):
+    """
+    The full-sample trade count was once copied into every period row, so the
+    in-sample and out-of-sample rows claimed the same number. Per-period counts
+    must tile the full count exactly.
+    """
+    run = run_pair(cfg.pairs[0], make_prices(), cfg)
+    n = {p: run.metrics[p]["net"]["n_trades"] for p in PERIODS}
+    assert n["full"] == run.result.n_trades
+    assert n["in_sample"] + n["out_of_sample"] == n["full"]
+    assert n["in_sample"] > 0 and n["out_of_sample"] > 0
+
+
+# --------------------------------------------------------------------------- #
+# inference table
+# --------------------------------------------------------------------------- #
+def test_inference_frame_has_one_row_per_cell_and_the_expected_columns(cfg):
+    runs = run_study(make_prices(), cfg)
+    inf = inference_frame(runs, cfg)
+    assert len(inf) == len(cfg.pairs) * len(PERIODS) * 2
+    assert not inf.duplicated(subset=["pair", "period", "basis"]).any()
+    for col in [
+        "sharpe",
+        "sharpe_se",
+        "sharpe_p",
+        "sharpe_ci_lo",
+        "sharpe_ci_hi",
+        "total_return",
+        "total_return_ci_lo",
+        "total_return_ci_hi",
+        "sharpe_p_holm",
+    ]:
+        assert col in inf.columns
+
+
+def test_inference_intervals_bracket_the_point_estimates(cfg):
+    """A percentile interval that excludes its own point estimate is a bug."""
+    runs = run_study(make_prices(), cfg)
+    inf = inference_frame(runs, cfg)
+    ok = inf.dropna(subset=["sharpe_ci_lo"])
+    assert (ok.sharpe_ci_lo <= ok.sharpe + 1e-9).all()
+    assert (ok.sharpe_ci_hi >= ok.sharpe - 1e-9).all()
+    assert (ok.total_return_ci_lo <= ok.total_return + 1e-9).all()
+    assert (ok.total_return_ci_hi >= ok.total_return - 1e-9).all()
+
+
+def test_inference_point_estimates_match_metrics(cfg):
+    """inference.csv and metrics.csv must agree on every shared number."""
+    runs = run_study(make_prices(), cfg)
+    table = to_frame(runs).set_index(["pair", "period", "basis"])
+    inf = inference_frame(runs, cfg).set_index(["pair", "period", "basis"])
+    pd.testing.assert_series_equal(inf["sharpe"], table.loc[inf.index, "sharpe"], check_names=False)
+    pd.testing.assert_series_equal(
+        inf["total_return"], table.loc[inf.index, "total_return"], check_names=False
+    )
+
+
+def test_holm_adjustment_is_within_period_and_basis(cfg):
+    """
+    Adjusted p-values are never below raw ones, and the family is the set of
+    pairs inside one (period, basis) cell -- so the adjustment never mixes
+    in-sample and out-of-sample tests.
+    """
+    runs = run_study(make_prices(), cfg)
+    inf = inference_frame(runs, cfg)
+    ok = inf.dropna(subset=["sharpe_p"])
+    assert (ok.sharpe_p_holm >= ok.sharpe_p - 1e-12).all()
+    for _, grp in ok.groupby(["period", "basis"]):
+        # With m pairs the largest possible multiplier is m.
+        assert (grp.sharpe_p_holm <= np.minimum(1.0, grp.sharpe_p * len(grp)) + 1e-12).all()
+
+
+def test_inference_is_deterministic_under_the_configured_seed(cfg):
+    runs = run_study(make_prices(), cfg)
+    a = inference_frame(runs, cfg)
+    b = inference_frame(runs, cfg)
+    pd.testing.assert_frame_equal(a, b)
+
+
+# --------------------------------------------------------------------------- #
+# Arm B: walk-forward
+# --------------------------------------------------------------------------- #
+def test_refit_dates_are_first_trading_day_of_each_oos_year(cfg):
+    idx = make_prices().index
+    dates = refit_dates(pd.DatetimeIndex(idx), SPLIT)
+    oos = idx[idx > pd.Timestamp(SPLIT)]
+    assert dates[0] == oos[0]
+    assert [d.year for d in dates] == sorted({d.year for d in oos})
+    for d in dates[1:]:
+        assert d == oos[oos.year == d.year][0]
+
+
+def test_walk_forward_window_rule(cfg):
+    wf = cfg.walk_forward
+    assert walk_forward_window(30.0, wf) == 60
+    assert walk_forward_window(5.0, wf) == 20  # floor
+    assert walk_forward_window(400.0, wf) == 250  # cap
+    assert walk_forward_window(float("inf"), wf) == 250  # undetectable -> cap
+    assert walk_forward_window(30.4, wf) == 61  # round, not truncate
+
+
+def test_walk_forward_in_sample_is_identical_to_arm_a(cfg):
+    """Before the split nothing is stale, so Arm B must reproduce Arm A exactly."""
+    a = run_pair(cfg.pairs[0], make_prices(), cfg)
+    b = run_pair_walk_forward(cfg.pairs[0], make_prices(), cfg)
+    assert b.metrics["in_sample"]["net"] == pytest.approx(a.metrics["in_sample"]["net"])
+    assert b.sizing_hedge_ratio == pytest.approx(a.sizing_hedge_ratio)
+
+
+def test_walk_forward_segments_tile_the_evaluation_window(cfg):
+    run = run_pair_walk_forward(cfg.pairs[0], make_prices(), cfg)
+    idx = run.result.returns.index
+    oos = idx[idx > pd.Timestamp(SPLIT)]
+    assert run.segments[0].start == oos[0]
+    assert run.segments[-1].end == oos[-1]
+    for prev, nxt in zip(run.segments, run.segments[1:]):
+        assert prev.end < nxt.start
+        assert idx[(idx > prev.end) & (idx < nxt.start)].empty
+    for s in run.segments:
+        assert s.fit_end < s.start
+
+
+def test_walk_forward_refit_uses_only_data_before_the_segment(cfg):
+    """
+    The leak guard for Arm B. Shock prices from a date D onward: every segment
+    that starts on or before D must keep its hedge ratio, half-life and window,
+    and every return before D must be unchanged.
+    """
+    base = run_pair_walk_forward(cfg.pairs[0], make_prices(), cfg)
+    D = base.segments[1].start  # shock from the start of the second OOS segment
+    prices = make_prices()
+    prices.loc[prices.index >= D, "A"] *= 1.5
+    shocked = run_pair_walk_forward(cfg.pairs[0], prices, cfg)
+
+    for s0, s1 in zip(base.segments, shocked.segments):
+        if s0.start <= D:
+            assert s1.hedge_ratio == pytest.approx(s0.hedge_ratio)
+            assert s1.half_life == pytest.approx(s0.half_life)
+            assert s1.window == s0.window
+    before = base.result.returns.index < D
+    pd.testing.assert_series_equal(shocked.result.returns[before], base.result.returns[before])
+
+
+def test_walk_forward_sizing_is_a_step_function_on_refit_dates(cfg):
+    run = run_pair_walk_forward(cfg.pairs[0], make_prices(), cfg)
+    idx = run.result.returns.index
+    # Reconstruct the sizing series the engine saw from the segments.
+    for s in run.segments:
+        seg = (idx >= s.start) & (idx <= s.end)
+        assert seg.sum() > 0
+    starts = [s.start for s in run.segments]
+    assert starts == refit_dates(pd.DatetimeIndex(idx), SPLIT)
+
+
+def test_walk_forward_recovers_the_planted_ratio_every_year(cfg):
+    run = run_pair_walk_forward(cfg.pairs[0], make_prices(), cfg)
+    for s in run.segments:
+        assert s.hedge_ratio == pytest.approx(TRUE_RATIO, abs=0.05)
+        assert s.traded
+
+
+def test_walk_forward_goes_flat_when_the_refit_hedge_is_not_positive(cfg):
+    """
+    A pair whose true relationship is negative (A moves against B) yields a
+    negative refit hedge ratio; the pre-registered rule is to sit flat for
+    that segment rather than trade a "hedge" that is a directional bet.
+    """
+    rng = np.random.default_rng(7)
+    idx = pd.bdate_range("2015-01-01", periods=N)
+    log_b = np.cumsum(rng.normal(0, 0.01, N)) + np.log(100.0)
+    log_a = -2.0 * log_b + 2.0 * log_b[0] + np.log(50.0) + rng.normal(0, 0.02, N)
+    prices = pd.DataFrame({"A": np.exp(log_a), "B": np.exp(log_b)}, index=idx)
+
+    run = run_pair_walk_forward(cfg.pairs[0], prices, cfg)
+    assert run.segments, "fixture must produce at least one evaluation segment"
+    assert all(s.hedge_ratio < 0 for s in run.segments)
+    assert not any(s.traded for s in run.segments)
+    held = run.result.held_positions
+    for s in run.segments:
+        seg = (held.index > s.start) & (held.index <= s.end)  # after the one-bar lag
+        assert (held[seg] == 0).all()
+    # ...and the out-of-sample P&L is therefore exactly zero after the position
+    # carried across the split has been closed.
+    oos_after_first_day = held.index > run.segments[0].start
+    assert run.result.gross_returns[oos_after_first_day].abs().sum() == pytest.approx(0.0)
+
+
+def test_walk_forward_tables_are_well_formed(cfg):
+    runs = run_study_walk_forward(make_prices(), cfg)
+    assert [r.pair.name for r in runs] == [p.name for p in cfg.pairs]
+    table = to_frame(runs)
+    assert len(table) == len(cfg.pairs) * len(PERIODS) * 2
+    inf = inference_frame(runs, cfg)
+    assert len(inf) == len(table)
+    seg = segments_frame(runs)
+    assert set(seg.columns) >= {
+        "pair",
+        "segment",
+        "start",
+        "end",
+        "fit_end",
+        "hedge_ratio",
+        "half_life",
+        "window",
+        "traded",
+    }
+    assert len(seg) == sum(len(r.segments) for r in runs)
