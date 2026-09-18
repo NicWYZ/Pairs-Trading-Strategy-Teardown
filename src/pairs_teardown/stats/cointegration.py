@@ -171,7 +171,11 @@ def half_life(spread: pd.Series) -> HalfLifeResult:
     s = spread.dropna()
     lagged = s.shift(1).iloc[1:]
     delta = s.diff().iloc[1:]
-    fit = sm.OLS(delta.to_numpy(), sm.add_constant(lagged.to_numpy())).fit()
+    # has_constant="add": the default ("skip") drops the intercept when the
+    # regressor is itself constant, leaving one column and no phi to read. An
+    # exactly-constant spread then raises instead of reporting "no reversion".
+    design = sm.add_constant(lagged.to_numpy(), has_constant="add")
+    fit = sm.OLS(delta.to_numpy(), design).fit()
     phi = float(fit.params[1])
     phi_se = float(fit.bse[1])
 

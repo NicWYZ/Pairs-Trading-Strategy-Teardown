@@ -156,6 +156,20 @@ def test_half_life_of_random_walk_is_not_distinguishable_from_infinite():
     assert math.isinf(res.half_life) or res.se > res.half_life  # SE swamps the estimate
 
 
+def test_half_life_of_an_exactly_constant_spread_is_infinite():
+    """
+    A spread with zero variance has nothing to revert, so the half-life is
+    infinite -- and it must not crash. ``sm.add_constant`` silently skips adding
+    the intercept when the regressor is already constant, leaving a one-column
+    design and no ``phi`` to read. Whether a spread like ``log(1.5 b) - log(b)``
+    is *exactly* constant depends on the platform's floating-point rounding, so
+    this failed on Linux CI while passing on macOS.
+    """
+    res = half_life(pd.Series(np.full(300, 0.405465)))
+    assert math.isinf(res.half_life)
+    assert res.phi == 0.0
+
+
 def test_half_life_phi_is_the_adf_coefficient_sign():
     res = half_life(_ou(np.log(2) / 5, 2000, 3))
     assert res.phi < 0
