@@ -19,5 +19,8 @@ reports/figures_holdout/*
 reports/results_holdout/*
 !**/.gitkeep
 
+REPORT.md
+CLAUDE.md
 PROJECT_PLAN.md
+
 .vscode/
