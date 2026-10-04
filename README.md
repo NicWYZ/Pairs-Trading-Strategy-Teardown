@@ -2,183 +2,191 @@
 
 [![CI](https://github.com/NicWYZ/Pairs-Trading-Strategy-Teardown/actions/workflows/ci.yml/badge.svg)](https://github.com/NicWYZ/Pairs-Trading-Strategy-Teardown/actions/workflows/ci.yml)
 
-An honest evaluation of whether classic pairs-trading edges survive realistic transaction
-costs and a strict out-of-sample test — built as production-grade research code rather than
-a notebook monolith.
+**Status: complete.** This repository is the final, frozen record of the study. The numbers
+below are reproduced exactly by `make run` and `make run-holdout`.
 
-This is a **teardown, not a strategy pitch**. The goal was never to find something
-profitable; it was to implement pairs trading carefully enough that whatever it says can be
-believed.
+## Abstract
 
-## The finding
+We evaluate a textbook pairs-trading strategy on ten economically-linked US large-cap pairs.
+The strategy uses a rolling-hedge spread, a 60-day z-score, and entry at |z| ≥ 2 with exit at
+|z| ≤ 0.5. Every parameter is fixed in advance, transaction costs are 6 bps per side, and the
+out-of-sample period (2022–2024) is scored once.
 
-Ten economically-linked US large-cap pairs, identical pre-registered parameters, 2015–2024
-with a 2021-12-31 in/out-of-sample split, 6 bps per side of cost. Out-of-sample, after
-costs:
+Out-of-sample, four of ten pairs are profitable after costs. The cross-sectional mean net
+return is +0.6% (t = 0.08, p = 0.94) with a standard deviation of 26 percentage points. No
+positive pair survives a Holm correction. The best Sharpe ratio (1.20) is half a standard
+error above the expected maximum of ten strategies with no edge (0.91).
 
-| | |
+The result is not a verdict on pairs trading. It measures what a ten-pair study can resolve.
+Pair-to-pair dispersion is so large relative to the mean that the headline is decided by
+arbitrary choices: which pairs are chosen, the lookback window, the hedge estimator.
+
+A pre-registered holdout (2025-01 → 2026-08) tests that reading directly. The 2022–2024
+ranking does not persist: none of the four winners repeats, and Spearman ρ = −0.56. A
+pre-registered methodological fix (annual re-estimation, with the window set from the
+half-life) produces no detectable improvement.
+
+## Results
+
+### Main study: 2015–2021 in-sample, 2022–2024 out-of-sample
+
+| Out-of-sample, net of 6 bps/side | |
 |---|---|
-| Profitable | **4 of 10** pairs |
+| Profitable pairs | **4 of 10** |
 | Range | **−42.4%** (UPS/FDX) to **+55.9%** (UNP/CSX) |
-| Cross-sectional mean | **+0.6%** — indistinguishable from zero (t = 0.08, p = 0.94) |
-| Cross-sectional std dev | **26 percentage points** |
-| Cost drag | consumes **~80%** of the mean gross return |
-| Standard error on any one pair's Sharpe | **0.58** (three years of daily data) |
-| Positive pairs surviving a Holm correction | **0 of 10** |
-| Best observed Sharpe vs. expected best-of-10 under no edge | **1.20 vs. 0.91** |
+| Cross-sectional mean | **+0.6%** (t = 0.08, p = 0.94); median −1.9% |
+| Cross-sectional standard deviation | **26.3 pp** |
+| Cost drag on the mean | +3.1% gross → +0.6% net (**80%**) |
+| Standard error of one pair's Sharpe (752 days) | **0.58** |
+| Positive pairs significant after Holm | **0 of 10** (only SPY/VOO, negatively) |
+| Best Sharpe vs expected best-of-10 with no edge | **1.20 vs 0.91** |
 
-The answer is not "pairs trading works" or "pairs trading fails". It is that **the
-dispersion across similar pairs dwarfs the average effect**, so any small-universe study
-reports whichever conclusion its pair selection produces. Five independent lines converge
-on that:
+Five lines of evidence point the same way. They are not independent: each shows that, at
+this sample size, the noise in any one pair's outcome is several times the average effect.
 
-- **The premise** — only **1 of 10** pairs is cointegrated in *both* the in-sample and
-  out-of-sample windows. The statistical property the method assumes does not persist.
-- **Pair selection** — the first three pairs chosen went 0 for 3; the last four went 3 for 4.
-- **Parameter choice** — 9 of 10 pairs change sign across an ordinary grid of lookback
-  windows, and the pre-registered window is the *only* one of six with a positive
-  cross-sectional mean.
-- **The cross-section** — a mean of +0.6% inside a 26pp standard deviation.
-- **Selection** — no positive pair's Sharpe survives a Holm correction across the ten, and
-  the best one (UNP/CSX, 1.20) sits half a standard error above the expected maximum of ten
-  strategies with no edge at all. The only Holm-significant result is SPY/VOO, negatively:
-  paying 6 bps to trade a spread with no variance loses money with near certainty.
+- **The premise does not persist.** 3 of 10 pairs are cointegrated (Engle–Granger, 5%)
+  in-sample and 3 of 10 out-of-sample, but only MA/V is cointegrated in both periods.
+  Johansen's test selects a different set and leaves MA/V and SPY/VOO. Half-lives of mean
+  reversion exceed the 60-day window for 5 of 10 pairs. For XOM/CVX and UPS/FDX, no
+  reversion is detectable at all.
+- **Pair selection decides the headline.** The pairs were chosen in three waves. The first
+  wave went 0 for 3 out-of-sample; the last went 3 for 4.
+- **Parameter choice moves every pair.** Across lookback windows of 40–120 days, 9 of 10
+  pairs change sign, and the pre-registered 60 is the only window with a positive mean.
+  Switching the signal hedge from rolling to static moves individual pairs by up to 48 pp
+  while moving the mean by 1 pp.
+- **The cross-section is centred on zero.** A mean of +0.6% sits inside a 26 pp standard
+  deviation.
+- **The best pair is what selection from noise looks like.** UNP/CSX's raw p = 0.039
+  becomes 0.35 after Holm.
 
-A useful corrective on costs: the per-pair breakeven cost is **bimodal**. Four pairs lose
-money at *zero* cost and four clear the 6 bps charge by 4–16x, so for 8 of 10 pairs the cost
-assumption barely affects the verdict. Most losing pairs have no gross edge, rather than an
-edge eaten by friction.
+On costs, the per-pair breakeven cost is bimodal:
 
-A second corrective on the premise: cointegration counts depend on the test (Engle–Granger
-and Johansen agree on one pair in-sample), and the estimated half-lives of mean reversion
-exceed the 60-day signal window for five of ten pairs — and for the slowest two, the
-reversion coefficient is within two standard errors of zero, so they cannot be told apart
-from random walks.
+- **No gross edge at any cost:** WM/RSG, SPY/VOO, XOM/CVX and UPS/FDX lose money even with
+  costs set to zero.
+- **Clear the charge comfortably:** UNP/CSX, DUK/SO, KO/PEP and HD/LOW break even at
+  26–100 bps per side.
+- **Decided by the cost assumption:** only MA/V and FOXA/FOX.
 
-At an earlier six-pair stage this project reported a confident negative result. Four more
-pairs, chosen the same way and run through identical code, moved the mean from clearly
-negative to indistinguishable from zero. Nothing was wrong with the machinery — the
-conclusion was simply never as stable as the tables made it look.
+So most losing pairs have no gross edge, rather than an edge eaten by friction.
 
-### The holdout (pre-registered, 2025-01 → 2026-08)
+### Holdout: pre-registered, 2025-01 → 2026-08
 
-Study 1 above was scored on 2022–2024. After it was written, a replication and one
-methodological variant were pre-registered ([`PREREGISTRATION.md`](PREREGISTRATION.md),
-committed before any later price was downloaded) and scored once on twenty unseen months:
+[`PREREGISTRATION.md`](PREREGISTRATION.md) was committed before any price after 2024-12-31
+was downloaded, and the holdout was scored once.
 
 | | |
 |---|---|
-| Frozen strategy, replicated | **2 of 10** profitable, mean **−3.5%** (p = 0.36), no pair significant |
-| Best holdout Sharpe vs. expected best-of-10 under no edge | **1.24 vs. 1.23** — exactly the noise floor |
-| 2022–24 winners that won again | **0 of 4**; Spearman ρ between periods **−0.56** (p = 0.09) |
-| Walk-forward variant (annual refit, half-life-set window) | **−7.8 pp** vs. frozen on 2022–24; **+2.9 pp** [−10, +14] on the holdout; individual pairs move by up to 46 pp |
+| Arm A, the frozen strategy | **2 of 10** profitable, mean **−3.5%** (p = 0.36), no pair significant |
+| Best holdout Sharpe vs expected best-of-10 with no edge | **1.24 vs 1.23** |
+| 2022–24 winners profitable again | **0 of 4**; Spearman ρ = **−0.56** (p = 0.09) |
+| Arm B − Arm A, walk-forward re-estimation | **−7.8 pp** on 2022–24; **+2.9 pp** [−10, +14] on the holdout |
+| Largest single-pair change from Arm B | 67 pp on 2022–24; 46 pp on the holdout |
 
-Study 1's numbers did not replicate; its thesis did. The pair a reader would have kept
-(UNP/CSX, +55.9%) lost 11.5%; the pair they would have dropped (UPS/FDX, −42.4%) made
-24.4%. And the textbook fix for the diagnosed problem — re-estimate what goes stale, size
-the window from the half-life — produced no detectable improvement, only a different draw.
-Details: [`notebooks/06_holdout.ipynb`](notebooks/06_holdout.ipynb).
+The 2022–2024 numbers did not replicate, but the thesis did:
 
-Full argument: [`notebooks/05_writeup.ipynb`](notebooks/05_writeup.ipynb).
-Tables and figures: [`notebooks/03_backtest_results.ipynb`](notebooks/03_backtest_results.ipynb).
-Robustness checks: [`notebooks/04_sensitivity_analysis.ipynb`](notebooks/04_sensitivity_analysis.ipynb).
+- UNP/CSX, the pair a reader would have kept after 2022–2024 (+55.9%), lost 11.5%.
+- UPS/FDX, the pair they would have dropped (−42.4%), made 24.4%.
 
-## Run it
+## Study design
+
+| | |
+|---|---|
+| Universe | 10 pairs, 20 tickers, each specified from economic reasoning before its own backtest (`configs/pairs.yaml`) |
+| Data | Yahoo Finance adjusted close, 2015-01-01 → 2024-12-30; holdout through 2026-08-28 |
+| Split | In-sample through 2021-12-31; out-of-sample 2022–2024 (752 trading days), scored once |
+| Spread | Log prices; rolling 60-day OLS hedge for the signal; static hedge fit in-sample only for sizing |
+| Signal | 60-day rolling z-score; enter at \|z\| ≥ 2.0, exit at \|z\| ≤ 0.5, hold in between |
+| Execution | Decided at the close of *t*, executed at *t+1* |
+| Costs | 1 bp commission + 5 bps slippage per side, on `(1 + \|g\|)` of notional per unit traded |
+| Inference | Lo (2002) Sharpe standard error; stationary bootstrap (2,000 draws, mean block 10, seed 0); Holm across pairs; expected maximum of N null Sharpes (Bailey & López de Prado 2014) |
+
+### Methodological rules, enforced in code
+
+1. **No look-ahead.** Positions lag one bar, and the sizing hedge is fit in-sample only.
+   `test_engine.py` and `test_study.py` fail if a future or out-of-sample price can move a
+   past result.
+2. **No data-snooping on parameters.** Window, bands, costs, bootstrap scheme and split are
+   fixed in the config. `notebooks/04` sweeps them as a reported finding and never feeds
+   back into the config.
+3. **No pair can be dropped or demoted.** `Pair` has no tier field, `run_study` cannot run a
+   subset, and `to_frame` emits no ranking column.
+4. **Gross and net are inseparable.** `summary()` returns both in one block, and every
+   Sharpe carries its standard error.
+5. **In-sample and out-of-sample are separated.** The holdout extends this with a plan
+   committed before its data existed. A leak guard checks that no walk-forward refit sees
+   data from its own segment.
+
+## Reproducing
 
 ```bash
 git clone https://github.com/NicWYZ/Pairs-Trading-Strategy-Teardown.git
 cd Pairs-Trading-Strategy-Teardown
-make install     # uv sync --extra dev
-make run         # downloads prices if stale, then the full study
+make install       # uv sync --extra dev
+make run           # download prices, run the main study -> reports/results/
+make run-holdout   # the pre-registered holdout       -> reports/results_holdout/
+make notebooks     # execute all six notebooks top to bottom
+make test lint typecheck
 ```
 
-`make run` writes `reports/results/metrics.csv`, `inference.csv` (standard errors,
-bootstrap intervals and adjusted p-values for every cell of it), a `run_manifest.json`
-recording exactly what was run, and three figures per pair. It is incremental — the backtest re-runs only if
-the config, the package source, or the cached prices changed.
+No market data is committed. The configs plus `uv.lock` reproduce every number.
+
+`make run` writes:
+
+- `metrics.csv`
+- `inference.csv` (standard errors, bootstrap intervals and Holm p-values for every cell)
+- the walk-forward tables
+- `run_manifest.json`
+- three figures per pair
+
+The notebooks read these files rather than recomputing them. Notebook 05 also reads
+`sensitivity.csv`, which notebook 04 writes, so run the notebooks in order.
+
+## Repository layout
 
 ```
-make run-holdout # the pre-registered holdout: download through 2026-08, run both arms once
-make test        make lint        make typecheck
-make notebooks   # execute every notebook to check it still runs
-make clean       # wipe reports/ (keeps cached prices)
-```
-
-No market data is committed. `configs/pairs.yaml` plus the lockfile are enough to
-reproduce every number.
-
-## How it is built
-
-```
+configs/            pairs.yaml (main study), pairs_holdout.yaml (holdout; frozen)
+PREREGISTRATION.md  holdout plan, committed before the holdout data was downloaded
 src/pairs_teardown/
-  data/         download + cache (parquet), align and clean
-  stats/        cointegration: OLS hedge ratio, ADF, Engle–Granger, Johansen, OU half-life
-                inference: Lo (2002) Sharpe SE, stationary bootstrap, Holm, expected max Sharpe
-  signals/      rolling z-score, entry/exit rules with hysteresis
-  backtest/     the engine (one-bar position lag) and the cost model
-  metrics/      Sharpe (with SE), drawdown, turnover, gross/net summary
-  plotting/     spread, equity, drawdown figures
-  study.py      the chain assembled: run a pair end-to-end (frozen split, and walk-forward), tabulate
-  config.py     load + validate configs/pairs.yaml
-
-notebooks/
-  01 data  ->  02 cointegration  ->  03 results  ->  04 sensitivity  ->  05 writeup  ->  06 holdout
-PREREGISTRATION.md   the holdout plan, committed before the holdout data existed
+  data/             download + parquet cache, alignment
+  stats/            cointegration (Engle–Granger, Johansen, OU half-life);
+                    inference (Lo SE, stationary bootstrap, Holm, expected max Sharpe)
+  signals/          rolling hedge, z-score, entry/exit rules with hysteresis
+  backtest/         engine (one-bar lag, hedge-stability guards) and cost model
+  metrics/          Sharpe with SE, drawdown, turnover, gross/net summary
+  study.py          end-to-end pair runs: frozen split (Arm A) and walk-forward (Arm B)
+scripts/            download, run, cache-path helper
+notebooks/          01 data → 02 cointegration → 03 results → 04 sensitivity
+                    → 05 writeup → 06 holdout
+tests/              138 tests on synthetic data with known answers; no network access
 ```
 
-All logic lives in tested, importable modules. Notebooks import and call; they contain no
-strategy code. 137 tests, all on synthetic data with known answers — the suite never
-touches the network.
+## Limitations
 
-## The statistics
+- **Small sample.** Ten pairs over three out-of-sample years cannot resolve a mean this
+  close to zero. Against a 26 pp standard deviation, a ±2% mean needs roughly 650 pairs.
+  Halving the 0.58 Sharpe standard error needs twelve years per pair.
+- **Selection.** Pairs were chosen in waves, waves 2 and 3 with earlier results in view.
+  Nothing was dropped, but this is not one-shot pre-registration.
+- **Survivorship.** All tickers are companies that still traded in 2026. That biases
+  results upward; correcting it needs point-in-time constituents with delisting returns.
+- **Costs.** A flat per-side cost with no market-impact model, no borrow costs and no
+  short-availability constraints.
+- **Sizing.** One spread unit is long $1 of A and short $g of B, so gross exposure differs
+  across pairs (1.45× to 2.22×). Returns are not volatility-scaled.
+- **FOXA/FOX** has 709 in-sample days against 1,763 for every other pair, because FOX
+  listed in 2019.
+- **Scope.** US large caps, one decade, daily bars.
 
-The point estimates are the easy part; the project's statistical content is in what is
-attached to them. Each tool has a closed-form or Monte Carlo test in `tests/`.
+The full argument is in [`notebooks/05_writeup.ipynb`](notebooks/05_writeup.ipynb) and the
+holdout in [`notebooks/06_holdout.ipynb`](notebooks/06_holdout.ipynb).
 
-| Question | Tool | Where |
-|---|---|---|
-| Is the spread cointegrated? | Engle–Granger (residual-based, with the MacKinnon correction for an estimated hedge ratio) **and** Johansen trace (system-based, symmetric in the legs) | `stats/cointegration.py` |
-| How fast does it revert? | Discrete Ornstein–Uhlenbeck fit; half-life = −ln 2 / ln(1+φ) with a delta-method SE | `stats/cointegration.py` |
-| How precise is one pair's Sharpe? | Lo (2002) analytic SE; Politis–Romano stationary bootstrap for serially dependent daily P&L | `stats/inference.py` |
-| Which of ten results survive? | Holm step-down adjustment (no independence assumption) | `stats/inference.py` |
-| Is the best pair better than the best of ten coin flips? | Expected maximum of N null Sharpes (Bailey & López de Prado 2014) | `stats/inference.py` |
+## Citation
 
-The bootstrap scheme (draws, block length, seed) is fixed in `configs/pairs.yaml` before any
-interval is seen, and the intervals are written by the pipeline to `inference.csv` rather
-than computed in a notebook — the same one-source discipline as the returns.
+Cite the tagged release `v1.0`, which is the state of the repository these results come
+from.
 
-## The five rules, and where they are enforced
-
-The point of the project is that these are enforced by code and tests, not asserted in
-prose:
-
-1. **No look-ahead.** Positions lag one bar; the hedge ratio is fit in-sample only.
-   Guarded by `test_engine.py` (changing a future price must not change past P&L) and
-   `test_study.py` (shocking out-of-sample prices must not move the fitted ratio). Both were
-   verified to go red when the bug is deliberately reintroduced.
-2. **Survivorship bias** is acknowledged and its direction stated, not engineered around.
-3. **No data-snooping.** Parameters fixed a priori. Every pair is reported whatever it did —
-   `Pair` has no tier field, `to_frame` emits no column that could rank pairs, and
-   `run_study` has no way to run a subset.
-4. **Gross and net always together.** `summary()` returns both in one block; they are not
-   separable through the API. Every Sharpe in that block carries its standard error.
-5. **In-sample and out-of-sample always separated.** OOS scored once, reported as-is. The
-   holdout extends this: the plan was committed before the data existed, and the walk-forward
-   arm's leak guard (`test_study.py`) checks that no refit sees data from its own segment.
-
-A note on rule 3: this project originally split its pairs into an "official" headline set
-and a "sanity check" set. That structure was a mistake — it would have let the same data
-support opposite conclusions depending on which tier a pair landed in — and removing it is
-what made the real result visible. The writeup discusses this at length rather than quietly
-fixing it.
-
-## Caveats
-
-Ten pairs is a small cross-section, and three years is a short out-of-sample window: the
-standard error of a Sharpe ratio falls as 1/√T, so halving 0.58 would need twelve years per
-pair. The study's own conclusion is partly a statement about how small both are. Pairs were chosen in waves, with later waves selected while earlier results were
-known. Costs are a flat per-side assumption with no market-impact model, no borrow costs and
-no short-availability constraints. All pairs are US large-cap equities over one decade.
-
-Details in [`notebooks/05_writeup.ipynb`](notebooks/05_writeup.ipynb) §4; the full build
-guide is [`PROJECT_PLAN.md`](PROJECT_PLAN.md).
+```
+Zhang, N. (2026). Pairs-Trading Strategy Teardown (v1.0) [Computer software].
+https://github.com/NicWYZ/Pairs-Trading-Strategy-Teardown
+```

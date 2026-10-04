@@ -102,7 +102,7 @@ def turnover(positions: pd.Series, periods_per_year: int = 252) -> float:
     {-1, 0, +1} spread position a full round trip (0 -> 1 -> 0) contributes two
     units of absolute change, so this is a coarse but honest activity measure.
 
-    Note this counts *changes within the sample only. The engine's cost model, not this function,
+    Note this counts changes *within the sample* only. The engine's cost model, not this function,
     is what applies notional-weighted (1 + |g|) costs; turnover here is a
     reporting statistic, not the thing costs are charged on.
 

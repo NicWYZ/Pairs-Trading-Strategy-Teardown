@@ -234,9 +234,8 @@ def _period_metrics(result: BacktestResult, cfg: Config) -> dict[str, dict[str, 
     for period in PERIODS:
         sliced = slice_result(result, masks[period])
         metrics[period] = summary(sliced, periods_per_year=ppy)
-        # A period's trade count is the trades executed *in* it. The engine's
-        # full-sample count was once copied into every period row, so the
-        # in-sample and out-of-sample rows reported the same number.
+        # A period's trade count is the trades executed *in* it, not the
+        # engine's full-sample count.
         for basis in ("gross", "net"):
             metrics[period][basis]["n_trades"] = sliced.n_trades
     return metrics
