@@ -45,7 +45,7 @@ signal:
 
   # Hedge-ratio specification, deliberately decoupled:
   #   signal_hedge = "rolling" — ADF-justified; static-hedge spreads fail
-  #       stationarity for WM/RSG (p~0.10) and FOXA/FOX (p~0.29).
+  #       stationarity in-sample for 6 of 10 pairs (02_cointegration_analysis §4).
   #   sizing_hedge = "static"  — a noisy rolling estimate that approaches zero
   #       destroys market neutrality.
   signal_hedge: "rolling"
