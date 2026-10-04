@@ -4,7 +4,7 @@
 # This file is the single source of truth for every parameter in the study.
 # It is committed to git, so it doubles as a record of WHAT WAS RUN.
 #
-# PARAMETER DISCIPLINE (see PROJECT_PLAN Section 8):
+# PARAMETER DISCIPLINE:
 #   - `window`, `entry`, `exit` are PRE-REGISTERED and FROZEN. They were chosen
 #     a priori (60 = a conventional quarter-year lookback; 2.0/0.5 = textbook
 #     entry/exit bands), NOT selected by looking at returns. Do not change them
@@ -31,7 +31,7 @@ data:
 #
 # 2021-12-31 gives ~7 years in-sample and ~3 years out-of-sample. It is a round
 # date picked for its position in the sample, not for anything it does to the
-# results (defensibility test, Section 5.11).
+# results.
 # ---------------------------------------------------------------------------
 split:
   in_sample_end: "2021-12-31"

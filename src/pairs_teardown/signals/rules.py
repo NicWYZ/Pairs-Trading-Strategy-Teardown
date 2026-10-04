@@ -19,7 +19,7 @@ def target_positions(zscore: pd.Series, entry_threshold: float, exit_threshold: 
     the spread either reverts past the exit band or flips to the opposite entry,
     which avoids churning in and out around a single threshold.
 
-    Position is in units of 'the spread'; the engine (Stage 4) translates it
+    Position is in units of 'the spread'; the backtest engine translates it
     into leg-level trades using the hedge ratio.
     """
     pos = pd.Series(index=zscore.index, dtype="float64")

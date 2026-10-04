@@ -28,7 +28,7 @@ help:
 	@echo "prices cache: $(PRICES)"
 
 # `uv sync`, never `uv pip install -e` -- the latter can target a different
-# Python than uv sync uses and split the venv (see CLAUDE.md).
+# Python than uv sync uses and split the venv.
 install:
 	uv sync --extra dev
 

@@ -47,9 +47,9 @@ def write_outputs(
     """
     Write both arms' CSVs, the run manifest, and three figures per pair.
 
-    Arm A (frozen split) keeps the historical file names so the existing
-    notebooks read it unchanged; Arm B (walk-forward) gets ``_walk_forward``
-    suffixes plus a segments table recording every refit.
+    Arm A (frozen split) writes ``metrics.csv`` and ``inference.csv``; Arm B
+    (walk-forward) writes the same tables with a ``_walk_forward`` suffix, plus
+    a segments table recording every refit.
     """
     results_dir = Path(cfg.output.results_dir)
     figures_dir = Path(cfg.output.figures_dir)
